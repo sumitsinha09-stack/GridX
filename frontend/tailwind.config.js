@@ -11,9 +11,9 @@ export default {
         'grid-panel': '#1b1d27',
         'grid-accent': '#00e5ff',
         'grid-accent-glow': 'rgba(0, 229, 255, 0.2)',
-        'grid-danger': '#ff3366',
-        'grid-warning': '#ff9900',
-        'grid-nominal': '#20c997',
+        'grid-danger': '#ef4444', // Red
+        'grid-warning': '#eab308', // Yellow
+        'grid-nominal': '#22c55e', // Green
         'grid-border': '#2d303a'
       },
       fontFamily: {

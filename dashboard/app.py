@@ -12,7 +12,7 @@ from src.ai_engine import GridAI
 
 # --- PAGE CONFIG ---
 st.set_page_config(
-    page_title="GridX Sentinel Dashboard",
+    page_title="GridX Dashboard",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -55,7 +55,7 @@ except Exception as e:
     model_loaded = False
 
 if model_loaded:
-    st.markdown('<p class="main-header">⚡ GridX Sentinel</p>', unsafe_allow_html=True)
+    st.markdown('<p class="main-header">⚡ GridX</p>', unsafe_allow_html=True)
     st.markdown('<p class="sub-header">Cascading Failure Prediction Platform</p>', unsafe_allow_html=True)
 
     # --- SIDEBAR CONTROLS ---

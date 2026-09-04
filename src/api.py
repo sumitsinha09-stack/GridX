@@ -10,7 +10,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from src.ai_engine import GridAI
 
-app = FastAPI(title="GridX Sentinel API")
+app = FastAPI(title="GridX API")
 
 # Setup CORS to allow React frontend (running on Vite's default 5173 or others)
 app.add_middleware(
@@ -40,6 +40,7 @@ async def startup_event():
 class SimulationRequest(BaseModel):
     broken_lines: List[int]
     demand_multiplier: float = 1.0
+    node_multipliers: Dict[int, float] = {}
 
 class SimulationResponse(BaseModel):
     predictions: Dict[int, float]
@@ -54,7 +55,8 @@ async def simulate(req: SimulationRequest):
     # Run inference
     predictions = ai_engine.predict_cascade(
         broken_lines=req.broken_lines,
-        demand_multiplier=req.demand_multiplier
+        demand_multiplier=req.demand_multiplier,
+        node_multipliers=req.node_multipliers
     )
 
     # Extract topology for the frontend network graph

@@ -1,6 +1,6 @@
-# ⚡ GridX Sentinel
+# ⚡ GridX
 
-GridX Sentinel is an AI-powered power grid cascading failure prediction platform. It leverages state-of-the-art Graph Neural Networks (GNNs) to simulate load stresses and physical line trips, predicting catastrophic grid collapses in real-time. 
+GridX is an AI-powered power grid cascading failure prediction platform. It leverages state-of-the-art Graph Neural Networks (GNNs) to simulate load stresses and physical line trips, predicting catastrophic grid collapses in real-time. 
 
 The application is built on top of the IEEE 39-bus "New England" power grid model and features a blazing-fast Python backend paired with a fully interactive, dark-themed industrial telemetry dashboard.
 
@@ -10,7 +10,12 @@ The application is built on top of the IEEE 39-bus "New England" power grid mode
 
 *   **Graph Attention Network (GAT):** A custom PyTorch Geometric neural network trained to understand spatial grid relationships and predict power line melting probabilities.
 *   **Real-Time Monte Carlo Solver:** A FastAPI backend that ingests physical anomalies (broken transmission lines) and environmental multipliers (heatwaves, load spikes) to compute cascading effects instantly.
-*   **Interactive Topology Map:** A WebGL-accelerated 2D force-directed graph built with `react-force-graph` that dynamically updates line colors (Cyan, Orange, Red) based on live AI risk assessments.
+*   **Interactive Topology Map:** A WebGL-accelerated 2D force-directed graph built with `react-force-graph` that allows you to click on individual nodes, override their local power demand, and watch the cascading effects ripple through the grid dynamically.
+*   **Dynamic Visualizations:** The graph instantly updates based on live AI risk assessments, color-coding the transmission lines: 
+    *   🟢 **Green (Safe):** <65% failure risk
+    *   🟡 **Yellow (Warning):** 65-85% failure risk
+    *   🔴 **Red (Critical):** >85% failure risk
+*   **Node Health & Disruption Metrics:** Calculates the health and disruption potential of specific power nodes in real-time based on the strain of their connected transmission lines.
 *   **Industrial Telemetry UI:** A custom React + Tailwind dashboard styled precisely for mission-critical monitoring, featuring real-time risk matrices and automated prioritization.
 
 ---
@@ -74,6 +79,7 @@ npm run dev
 ## 🖥️ Usage
 
 1. Open your browser and navigate to `http://localhost:5173`.
-2. **Trigger Outages:** On the left sidebar, click the **"FORCE TRIP ADDITIONAL BRANCH"** button to physically simulate a transmission line being destroyed. 
-3. **Stress the Grid:** Adjust the **Load Multiplier** slider to simulate extreme weather events (e.g., pulling 1.60x nominal power).
-4. **Calculate Risk:** Click the cyan **"Run Monte Carlo Solver"** button. The frontend will hit the FastAPI backend, process the grid through the GAT model, and visually update the map and sidebars with the new failure probabilities.
+2. **Stress the Grid (Global):** Adjust the **Global Load Multiplier** slider to simulate extreme weather events (e.g., pulling 1.50x nominal power across all cities).
+3. **Stress Specific Nodes:** Click on any node on the graph to bring up its **Node Configuration** panel. You can override its specific power demand to see how localized surges affect the grid.
+4. **Trigger Outages:** On the left sidebar, click the **"FORCE TRIP RANDOM BRANCH"** button to physically simulate a transmission line being destroyed. You can easily reset outages using the Reset button.
+5. **Real-Time AI Processing:** The frontend automatically streams your changes to the FastAPI backend, processes the grid through the GAT model, and updates the map and sidebars in real-time.

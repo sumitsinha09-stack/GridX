@@ -35,11 +35,21 @@ class GridAI:
 
         print("AI Engine Ready!")
 
-    def predict_cascade(self, broken_lines: list, demand_multiplier: float = 1.0):
+    def predict_cascade(self, broken_lines: list, demand_multiplier: float = 1.0, node_multipliers: dict = None):
+        if node_multipliers is None:
+            node_multipliers = {}
         # 1. Simulate Node Changes (Power Demand adjustments)
         sim_node_features = self.base_node_features.copy()
         sim_node_features[:, 0] *= demand_multiplier
         sim_node_features[:, 1] *= demand_multiplier
+
+        # Apply per-node overrides
+        for node_id, mult in node_multipliers.items():
+            node_id_int = int(node_id)
+            if node_id_int < len(sim_node_features):
+                sim_node_features[node_id_int, 0] = self.base_node_features[node_id_int, 0] * float(mult)
+                sim_node_features[node_id_int, 1] = self.base_node_features[node_id_int, 1] * float(mult)
+
         x_scaled = self.scaler_nodes.transform(sim_node_features)
 
         # 2. Simulate Edge Changes (Broken Lines)

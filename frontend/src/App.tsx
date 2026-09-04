@@ -14,7 +14,7 @@ function App() {
           <div className="flex items-center space-x-2">
             <Zap className="w-6 h-6 text-grid-accent" />
             <div className="flex flex-col">
-              <span className="font-bold text-white text-lg leading-tight tracking-wide">SENTINEL</span>
+              <span className="font-bold text-white text-lg leading-tight tracking-wide">GridX</span>
               <span className="text-[0.6rem] text-gray-500 font-mono tracking-widest uppercase">Telemetry Hub</span>
             </div>
           </div>
@@ -39,19 +39,6 @@ function App() {
               </div>
             </div>
           </div>
-        </div>
-
-        {/* Navigation Tabs */}
-        <div className="flex items-center space-x-2">
-          <button
-            className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors bg-grid-accent text-black`}
-          >
-            Topology & Simulation
-          </button>
-        </div>
-
-        <div className="flex items-center space-x-2 w-[88px]">
-           {/* Spacer to replace EXPORT button and keep layout balanced */}
         </div>
       </header>
 
