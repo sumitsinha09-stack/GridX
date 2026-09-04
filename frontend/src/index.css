@@ -5,8 +5,35 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    --grid-bg: #07080b;
+    --grid-bg-alt: #12141c;
+    --grid-panel: #1b1d27;
+    --grid-panel-alt: #161821;
+    --grid-text: #ffffff;
+    --grid-text-muted: #d1d5db;
+    --grid-text-dim: #9ca3af;
+    --grid-inverse: #000000;
+    --grid-border: rgba(255,255,255,0.05);
+  }
+
+  body.light-theme {
+    --grid-bg: #f3f4f6;
+    --grid-bg-alt: #ffffff;
+    --grid-panel: #ffffff;
+    --grid-panel-alt: #f9fafb;
+    --grid-text: #111827;
+    --grid-text-muted: #374151;
+    --grid-text-dim: #6b7280;
+    --grid-inverse: #ffffff;
+    --grid-border: rgba(0,0,0,0.1);
+  }
+
   body {
-    @apply bg-grid-bg text-gray-300 font-sans antialiased h-screen overflow-hidden;
+    background-color: var(--grid-bg);
+    color: var(--grid-text-muted);
+    @apply font-sans antialiased;
+    transition: background-color 0.3s ease, color 0.3s ease;
   }
 }
 

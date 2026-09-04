@@ -10,6 +10,10 @@ The application is built on top of the IEEE 39-bus "New England" power grid mode
 
 *   **Graph Attention Network (GAT):** A custom PyTorch Geometric neural network trained to understand spatial grid relationships and predict power line melting probabilities.
 *   **Real-Time Monte Carlo Solver:** A FastAPI backend that ingests physical anomalies (broken transmission lines) and environmental multipliers (heatwaves, load spikes) to compute cascading effects instantly.
+*   **Multi-Page Application Architecture:** Seamless React Router integration featuring a cinematic 3D Landing Page, the main Topology Simulator, a dedicated Analytics page, and a System Configuration panel.
+*   **Immersive 3D UI & Animations:** Powered by `framer-motion` and custom CSS transforms, featuring parallax glassmorphism cards and a "dive-into-the-grid" page transition.
+*   **Native Light/Dark Mode:** Built-in dynamic theme toggling powered by custom semantic CSS variables for perfect contrast in both daylight and low-light environments.
+*   **AI Training Analytics:** Track the PyTorch Graph Attention Network's actual convergence metrics and F1 Accuracy score (85.8%) via beautifully animated `recharts` graphs.
 *   **Interactive Topology Map:** A WebGL-accelerated 2D force-directed graph built with `react-force-graph` that allows you to click on individual nodes, override their local power demand, and watch the cascading effects ripple through the grid dynamically.
 *   **Dynamic Visualizations:** The graph instantly updates based on live AI risk assessments, color-coding the transmission lines: 
     *   🟢 **Green (Safe):** <65% failure risk
@@ -32,10 +36,12 @@ The application is built on top of the IEEE 39-bus "New England" power grid mode
 *   `Pydantic` (Data Validation)
 
 **Frontend Dashboard:**
-*   `React 18` (TypeScript)
+*   `React 18` (TypeScript) & `React Router`
 *   `Vite` (Build Tool)
 *   `Tailwind CSS` (Styling)
+*   `Framer Motion` (3D Animations & Transitions)
 *   `react-force-graph-2d` (Network Visualization)
+*   `Recharts` (Analytics Visualization)
 
 ---
 

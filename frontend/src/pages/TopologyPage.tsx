@@ -4,7 +4,7 @@ import { ShieldAlert, Zap, PlusCircle, AlertTriangle, Play, ChevronRight, Activi
 
 import ForceGraph2D from 'react-force-graph-2d';
 
-export default function TopologyTab() {
+export default function TopologyPage() {
   const [multiplier, setMultiplier] = useState(1.35);
   const [running, setRunning] = useState(false);
   const [predictions, setPredictions] = useState<Record<number, number>>({});
@@ -83,22 +83,23 @@ export default function TopologyTab() {
   const paintNode = useCallback((node: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
     const isSelected = selectedNode === node.id;
     const isCustomized = nodeMultipliers[node.id] !== undefined;
+    const isLight = document.body.classList.contains('light-theme');
 
     ctx.beginPath();
     ctx.arc(node.x, node.y, 5, 0, 2 * Math.PI, false);
 
     // Core color
-    ctx.fillStyle = isSelected ? '#00cce6' : isCustomized ? '#ff9900' : '#1b1d27';
+    ctx.fillStyle = isSelected ? '#00cce6' : isCustomized ? '#ff9900' : (isLight ? '#ffffff' : '#1b1d27');
     ctx.fill();
 
     // Border
     ctx.lineWidth = isSelected ? 2 : 1;
-    ctx.strokeStyle = isSelected ? '#ffffff' : isCustomized ? '#ff9900' : '#444';
+    ctx.strokeStyle = isSelected ? '#ffffff' : isCustomized ? '#ff9900' : (isLight ? '#d1d5db' : '#444');
     ctx.stroke();
 
     // Always show Node ID below the node
     ctx.font = `${10 / globalScale}px Sans-Serif`;
-    ctx.fillStyle = '#a1a1aa'; // gray-400
+    ctx.fillStyle = isLight ? '#6b7280' : '#a1a1aa'; // gray-400
     ctx.textAlign = 'center';
     ctx.fillText(node.id.toString(), node.x, node.y + 12);
 
@@ -112,15 +113,15 @@ export default function TopologyTab() {
   }, [selectedNode, nodeMultipliers]);
 
   return (
-    <div className="h-full w-full flex p-4 gap-4 bg-grid-bg text-gray-300">
+    <div className="min-h-full w-full flex p-4 gap-4 bg-grid-bg text-grid-text-muted">
 
       {/* LEFT SIDEBAR: Controls */}
-      <div className="w-80 flex flex-col gap-4 overflow-y-auto pr-2">
+      <div className="w-80 flex flex-col gap-4 pr-2">
 
         {/* Global Load Multiplier */}
         <div className="panel p-4 shrink-0">
           <div className="flex justify-between items-center mb-4">
-            <h3 className="font-bold text-gray-300 text-sm">Global Load Multiplier</h3>
+            <h3 className="font-bold text-grid-text-muted text-sm">Global Load Multiplier</h3>
             <span className="text-grid-warning font-bold font-mono">{multiplier.toFixed(2)}x</span>
           </div>
           <input
@@ -130,7 +131,7 @@ export default function TopologyTab() {
             onChange={(e) => setMultiplier(parseFloat(e.target.value))}
             className="w-full accent-grid-warning mb-2"
           />
-          <div className="flex justify-between text-[10px] text-gray-500 font-mono">
+          <div className="flex justify-between text-[10px] text-grid-text-dim font-mono">
             <span>0.80x<br/>(Low)</span>
             <span className="text-center">1.00x<br/>(Nominal)</span>
             <span className="text-right">2.50x<br/>(Severe)</span>
@@ -140,7 +141,7 @@ export default function TopologyTab() {
         {/* Node Selection Overlay */}
         <div className="panel p-4 flex flex-col gap-3 shrink-0">
           <div className="flex justify-between items-center mb-1">
-            <h3 className="font-bold text-white text-sm uppercase tracking-wider">Node Configuration</h3>
+            <h3 className="font-bold text-grid-text text-sm uppercase tracking-wider">Node Configuration</h3>
             <span className="text-xs text-grid-accent font-mono bg-grid-accent/10 px-1.5 py-0.5 rounded">
               {selectedNode !== null ? `Node ${selectedNode}` : 'None Selected'}
             </span>
@@ -149,20 +150,20 @@ export default function TopologyTab() {
           {selectedNode !== null ? (
             <div className="flex flex-col gap-2 mt-2">
               {nodeMetrics && (
-                <div className="bg-[#12141c] border border-grid-border rounded p-3 mb-2 flex flex-col gap-2">
+                <div className="bg-grid-bg-alt border border-grid-border rounded p-3 mb-2 flex flex-col gap-2">
                   <div className="flex justify-between items-center">
-                     <span className="text-xs text-gray-400">Node Health</span>
+                     <span className="text-xs text-grid-text-muted">Node Health</span>
                      <span className={`text-sm font-bold ${nodeMetrics.health < 15 ? 'text-grid-danger' : nodeMetrics.health < 35 ? 'text-grid-warning' : 'text-grid-nominal'}`}>
                        {nodeMetrics.health.toFixed(1)}%
                      </span>
                   </div>
                   <div className="flex justify-between items-center">
-                     <span className="text-xs text-gray-400">Disruption Potential</span>
+                     <span className="text-xs text-grid-text-muted">Disruption Potential</span>
                      <span className={`text-xs font-bold uppercase px-1.5 py-0.5 rounded ${nodeMetrics.disruptionPotential === 'Critical' ? 'bg-grid-danger/20 text-grid-danger' : nodeMetrics.disruptionPotential === 'High' ? 'bg-grid-warning/20 text-grid-warning' : 'bg-grid-nominal/20 text-grid-nominal'}`}>
                        {nodeMetrics.disruptionPotential}
                      </span>
                   </div>
-                  <div className="w-full h-1.5 bg-[#1b1d27] rounded-full overflow-hidden mt-1">
+                  <div className="w-full h-1.5 bg-grid-panel rounded-full overflow-hidden mt-1">
                      <div
                         className={`h-full ${nodeMetrics.health < 15 ? 'bg-grid-danger' : nodeMetrics.health < 35 ? 'bg-grid-warning' : 'bg-grid-nominal'}`}
                         style={{ width: `${nodeMetrics.health}%` }}
@@ -171,7 +172,7 @@ export default function TopologyTab() {
                 </div>
               )}
               <div className="flex justify-between items-center">
-                <span className="text-xs text-gray-400">Custom Load Multiplier</span>
+                <span className="text-xs text-grid-text-muted">Custom Load Multiplier</span>
                 <span className="text-sm font-bold text-grid-accent">
                   {nodeMultipliers[selectedNode] !== undefined
                     ? `${nodeMultipliers[selectedNode].toFixed(2)}x`
@@ -189,14 +190,14 @@ export default function TopologyTab() {
                 <button
                   onClick={() => removeNodeMultiplier(selectedNode)}
                   disabled={nodeMultipliers[selectedNode] === undefined}
-                  className={`text-xs px-2 py-1 rounded border ${nodeMultipliers[selectedNode] !== undefined ? 'border-grid-danger text-grid-danger hover:bg-grid-danger/10' : 'border-gray-700 text-gray-600'}`}
+                  className={`text-xs px-2 py-1 rounded border ${nodeMultipliers[selectedNode] !== undefined ? 'border-grid-danger text-grid-danger hover:bg-grid-danger/10' : 'border-grid-border text-gray-600'}`}
                 >
                   Reset to Global
                 </button>
               </div>
             </div>
           ) : (
-            <div className="text-xs text-gray-500 italic p-4 text-center border border-dashed border-gray-700 rounded mt-2">
+            <div className="text-xs text-grid-text-dim italic p-4 text-center border border-dashed border-grid-border rounded mt-2">
               Click a node on the graph to configure its specific load demand.
             </div>
           )}
@@ -205,13 +206,13 @@ export default function TopologyTab() {
         {/* Triggered Outages */}
         <div className="panel p-4 flex flex-col gap-3 shrink-0">
           <div className="flex justify-between items-center mb-1">
-            <h3 className="font-bold text-white text-sm uppercase tracking-wider">Triggered Outages</h3>
+            <h3 className="font-bold text-grid-text text-sm uppercase tracking-wider">Triggered Outages</h3>
             <div className="flex items-center gap-2">
               <span className="text-xs text-grid-danger font-mono bg-grid-danger/10 px-1.5 py-0.5 rounded">{brokenLines.length} Tripped</span>
               {brokenLines.length > 0 && (
                 <button
                   onClick={() => setBrokenLines([])}
-                  className="text-xs text-gray-400 hover:text-white transition-colors underline"
+                  className="text-xs text-grid-text-muted hover:text-grid-text transition-colors underline"
                 >
                   Reset
                 </button>
@@ -220,16 +221,16 @@ export default function TopologyTab() {
           </div>
 
           {brokenLines.map((lineId) => (
-            <div key={lineId} className="bg-[#12141c] border border-grid-border rounded p-2.5 flex justify-between items-center">
+            <div key={lineId} className="bg-grid-bg-alt border border-grid-border rounded p-2.5 flex justify-between items-center">
               <div className="flex items-center gap-2">
                 <div className="w-1.5 h-1.5 rounded-full bg-grid-danger animate-pulse" />
-                <span className="text-sm font-mono text-gray-300">Line ID: {lineId}</span>
+                <span className="text-sm font-mono text-grid-text-muted">Line ID: {lineId}</span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="badge badge-danger">TRIPPED</span>
                 <button
                   onClick={() => setBrokenLines(brokenLines.filter(id => id !== lineId))}
-                  className="text-gray-500 hover:text-grid-danger transition-colors"
+                  className="text-grid-text-dim hover:text-grid-danger transition-colors"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -273,14 +274,14 @@ export default function TopologyTab() {
             <div className="flex items-center gap-3">
               <div className="bg-grid-bg/80 backdrop-blur p-2 border border-grid-border rounded-lg flex items-center gap-2 pointer-events-auto">
                 <ShareIcon />
-                <span className="font-bold text-white text-sm">IEEE 39-Bus New England</span>
+                <span className="font-bold text-grid-text text-sm">IEEE 39-Bus</span>
               </div>
-              <span className="text-xs text-gray-500 font-mono">345kV Bulk Core</span>
+              <span className="text-xs text-grid-text-dim font-mono">345kV Bulk Core</span>
             </div>
           </div>
 
           {/* Actual D3/NetworkX Graph */}
-          <div className="flex-1 bg-[#0b0c10] flex items-center justify-center relative border border-grid-border m-4 mt-16 rounded-xl overflow-hidden cursor-crosshair">
+          <div className="flex-1 bg-grid-bg flex items-center justify-center relative border border-grid-border m-4 mt-16 rounded-xl overflow-hidden cursor-crosshair">
              {edges.length > 0 ? (
                <ForceGraph2D
                  width={800}
@@ -304,18 +305,18 @@ export default function TopologyTab() {
                  }}
                  linkWidth={(link: any) => link.isBroken ? 1 : link.risk > 0.85 ? 4 : link.risk > 0.65 ? 3 : 2}
                  linkLineDash={(link: any) => link.isBroken ? [5, 5] : []}
-                 backgroundColor="#0b0c10"
+                 backgroundColor={document.body.classList.contains('light-theme') ? '#f3f4f6' : '#07080b'}
                />
              ) : (
                <>
                  <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(circle at center, #1b1d27 2px, transparent 2px)', backgroundSize: '30px 30px' }} />
-                 <span className="text-gray-500 font-mono animate-pulse">Waiting for Simulation Data...</span>
+                 <span className="text-grid-text-dim font-mono animate-pulse">Waiting for Simulation Data...</span>
                </>
              )}
           </div>
 
           {/* Viz Legend */}
-          <div className="absolute bottom-4 left-8 right-8 flex justify-between items-center text-[10px] font-mono text-gray-400">
+          <div className="absolute bottom-4 left-8 right-8 flex justify-between items-center text-[10px] font-mono text-grid-text-muted">
              <div className="flex gap-4">
                 <div className="flex items-center gap-1"><div className="w-3 h-0.5 bg-grid-nominal" /> Safe &lt;65%</div>
                 <div className="flex items-center gap-1"><div className="w-3 h-0.5 bg-grid-warning" /> Intermediate Safe 65-85%</div>
@@ -328,24 +329,24 @@ export default function TopologyTab() {
       </div>
 
       {/* RIGHT SIDEBAR */}
-      <div className="w-80 flex flex-col gap-4 overflow-y-auto pl-2">
+      <div className="w-80 flex flex-col gap-4 pl-2">
          {/* Cascade Probability */}
          <div className="panel p-4 flex flex-col relative overflow-hidden shrink-0">
             <div className="flex justify-between items-center mb-6 z-10">
-               <h3 className="font-bold text-white text-sm uppercase tracking-wider">Cascade Probability</h3>
-               <span className="bg-grid-danger text-white text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-widest">
+               <h3 className="font-bold text-grid-text text-sm uppercase tracking-wider">Cascade Probability</h3>
+               <span className="bg-grid-danger text-grid-text text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-widest">
                   {Object.values(predictions).some(p => p > 0.85) ? 'Critical Alert' : 'Nominal'}
                </span>
             </div>
 
             <div className="flex items-center justify-between z-10">
                <div className="flex flex-col">
-                  <span className="text-5xl font-bold text-white tracking-tighter">
+                  <span className="text-5xl font-bold text-grid-text tracking-tighter">
                      {Object.values(predictions).length > 0
                         ? `${(Math.max(...Object.values(predictions)) * 100).toFixed(1)}%`
                         : '0.0%'}
                   </span>
-                  <span className="text-[10px] text-gray-400 font-mono mt-1 uppercase w-32 leading-tight">Max AI Prediction Risk</span>
+                  <span className="text-[10px] text-grid-text-muted font-mono mt-1 uppercase w-32 leading-tight">Max AI Prediction Risk</span>
                </div>
                <div className="w-16 h-16 rounded-full border-4 border-grid-danger/20 border-t-grid-danger border-r-grid-danger flex items-center justify-center transform -rotate-45">
                   <div className="transform rotate-45">
@@ -357,15 +358,15 @@ export default function TopologyTab() {
             <div className="grid grid-cols-3 gap-2 mt-6 pt-4 border-t border-grid-border z-10">
                <div className="flex flex-col items-center">
                   <span className="text-grid-danger font-bold text-lg">{Object.values(predictions).filter(p => p > 0.85).length}</span>
-                  <span className="text-[9px] text-gray-500 uppercase tracking-wider">Critical</span>
+                  <span className="text-[9px] text-grid-text-dim uppercase tracking-wider">Critical</span>
                </div>
                <div className="flex flex-col items-center border-x border-grid-border">
                   <span className="text-grid-warning font-bold text-lg">{Object.values(predictions).filter(p => p > 0.5 && p <= 0.85).length}</span>
-                  <span className="text-[9px] text-gray-500 uppercase tracking-wider">Warning</span>
+                  <span className="text-[9px] text-grid-text-dim uppercase tracking-wider">Warning</span>
                </div>
                <div className="flex flex-col items-center">
                   <span className="text-grid-nominal font-bold text-lg">{Object.values(predictions).filter(p => p <= 0.5).length}</span>
-                  <span className="text-[9px] text-gray-500 uppercase tracking-wider">Nominal</span>
+                  <span className="text-[9px] text-grid-text-dim uppercase tracking-wider">Nominal</span>
                </div>
             </div>
             <div className="absolute top-0 right-0 w-32 h-32 bg-grid-danger/10 blur-3xl rounded-full" />
@@ -374,25 +375,25 @@ export default function TopologyTab() {
          {/* Affected Custom Nodes Panel */}
          <div className="panel p-4 flex flex-col shrink-0">
             <div className="flex justify-between items-end mb-4">
-               <h3 className="font-bold text-white text-sm uppercase tracking-wider w-32">Custom Node Loads</h3>
-               <span className="text-[10px] text-gray-500 font-mono text-right">Overrides</span>
+               <h3 className="font-bold text-grid-text text-sm uppercase tracking-wider w-32">Custom Node Loads</h3>
+               <span className="text-[10px] text-grid-text-dim font-mono text-right">Overrides</span>
             </div>
 
             <div className="flex flex-col gap-2">
                {Object.keys(nodeMultipliers).length === 0 ? (
-                 <span className="text-xs text-gray-500 italic text-center py-2">No active overrides.</span>
+                 <span className="text-xs text-grid-text-dim italic text-center py-2">No active overrides.</span>
                ) : (
                  Object.entries(nodeMultipliers).map(([nodeId, mult]) => (
-                   <div key={nodeId} className="flex justify-between items-center bg-[#12141c] p-2 rounded border border-grid-border">
+                   <div key={nodeId} className="flex justify-between items-center bg-grid-bg-alt p-2 rounded border border-grid-border">
                      <div className="flex items-center gap-2">
                         <div className="w-2 h-2 rounded-full bg-grid-warning animate-pulse" />
-                        <span className="text-sm font-mono text-gray-300">Node {nodeId}</span>
+                        <span className="text-sm font-mono text-grid-text-muted">Node {nodeId}</span>
                      </div>
                      <div className="flex items-center gap-3">
                         <span className="font-bold text-grid-warning">{mult.toFixed(2)}x</span>
                         <button
                            onClick={() => removeNodeMultiplier(parseInt(nodeId))}
-                           className="text-gray-500 hover:text-grid-danger transition-colors"
+                           className="text-grid-text-dim hover:text-grid-danger transition-colors"
                            title="Reset to global"
                         >
                            <X className="w-4 h-4" />
@@ -407,8 +408,8 @@ export default function TopologyTab() {
          {/* Branch Loading Priority */}
          <div className="panel p-4 flex-1 flex flex-col">
             <div className="flex justify-between items-end mb-4">
-               <h3 className="font-bold text-white text-sm uppercase tracking-wider w-32">Branch Loading Priority</h3>
-               <span className="text-[10px] text-gray-500 font-mono text-right">Sorted by<br/>AI Risk</span>
+               <h3 className="font-bold text-grid-text text-sm uppercase tracking-wider w-32">Branch Loading Priority</h3>
+               <span className="text-[10px] text-grid-text-dim font-mono text-right">Sorted by<br/>AI Risk</span>
             </div>
 
             <div className="flex flex-col gap-3">
@@ -418,12 +419,12 @@ export default function TopologyTab() {
                   .map(([lineId, risk]) => (
                   <div key={lineId} className="flex flex-col gap-1 border-b border-grid-border pb-3">
                      <div className="flex justify-between font-mono text-sm">
-                        <span className="text-gray-300">Line ID: {lineId}</span>
+                        <span className="text-grid-text-muted">Line ID: {lineId}</span>
                         <span className={`font-bold ${risk > 0.85 ? 'text-grid-danger' : risk > 0.5 ? 'text-grid-warning' : 'text-grid-nominal'}`}>
                            {(risk * 100).toFixed(1)}% Risk
                         </span>
                      </div>
-                     <div className="w-full h-1 bg-[#12141c] rounded-full overflow-hidden">
+                     <div className="w-full h-1 bg-grid-bg-alt rounded-full overflow-hidden">
                         <div
                            className={`h-full ${risk > 0.85 ? 'bg-grid-danger' : risk > 0.5 ? 'bg-grid-warning' : 'bg-grid-nominal'}`}
                            style={{ width: `${risk * 100}%` }}
