@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Settings2, ShieldAlert, Cpu, Bell, Network, Save, ServerCrash } from 'lucide-react';
+import { Settings2, Cpu, Bell, Network, Save } from 'lucide-react';
 
 export default function SettingsPage() {
   const [useCuda, setUseCuda] = useState(true);

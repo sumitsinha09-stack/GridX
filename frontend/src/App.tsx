@@ -1,11 +1,13 @@
 import { BrowserRouter, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
-import { Activity, Settings2, Zap, Sun, Moon, Bell, SlidersHorizontal, Radio, Cpu, RotateCcw } from 'lucide-react';
+import { Activity, Settings2, Zap, Sun, Moon, Radio, ShieldAlert, Database, Layers } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 
-// Import Pages
+// Import Multi-Page Architecture
 import LandingPage from './pages/LandingPage';
 import TopologyPage from './pages/TopologyPage';
+import SectorTelemetryPage from './pages/SectorTelemetryPage';
+import ContingencyPage from './pages/ContingencyPage';
 import AnalyticsPage from './pages/AnalyticsPage';
 import SettingsPage from './pages/SettingsPage';
 
@@ -32,20 +34,27 @@ export function ThemeToggle() {
   );
 }
 
-// Layout matching the industrial telemetry top bar
+// Multi-Page Dashboard Layout
 function DashboardLayout() {
   const location = useLocation();
+
+  const navLinks = [
+    { to: '/app/topology', label: 'Topology', icon: Layers },
+    { to: '/app/telemetry', label: 'Sector Telemetry', icon: Activity },
+    { to: '/app/contingency', label: 'Contingency Lab', icon: ShieldAlert },
+    { to: '/app/analytics', label: 'Spark Analytics', icon: Database },
+    { to: '/app/settings', label: 'Settings', icon: Settings2 },
+  ];
 
   return (
     <motion.div
       className="flex flex-col min-h-screen bg-[#07090e] text-gray-200 relative z-20 font-sans"
-      initial={{ opacity: 0, scale: 0.98 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.98 }}
-      transition={{ duration: 0.3 }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.2 }}
     >
       {/* Top Telemetry Header */}
-      <header className="h-14 bg-[#0a0d14] border-b border-white/10 flex items-center justify-between px-5 shrink-0 z-30 select-none">
+      <header className="h-14 bg-[#0a0d14] border-b border-white/10 flex items-center justify-between px-5 shrink-0 z-40 select-none">
         
         {/* Left: Brand / Logo */}
         <div className="flex items-center gap-3">
@@ -67,10 +76,8 @@ function DashboardLayout() {
           </Link>
         </div>
 
-        {/* Center: Live Industrial Telemetry Badges */}
+        {/* Center: Live Industrial Status */}
         <div className="hidden xl:flex items-center gap-3 text-xs font-mono">
-          
-          {/* Frequency */}
           <div className="flex items-center gap-2 bg-[#0e131f] border border-white/10 px-3 py-1 rounded-md">
             <span className="text-[10px] text-gray-400 uppercase">Freq:</span>
             <span className="text-cyan-400 font-bold">59.988</span>
@@ -78,7 +85,6 @@ function DashboardLayout() {
             <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 shadow-[0_0_6px_#00e5ff]" />
           </div>
 
-          {/* Load */}
           <div className="flex items-center gap-2 bg-[#0e131f] border border-white/10 px-3 py-1 rounded-md">
             <span className="text-[10px] text-gray-400 uppercase">Load:</span>
             <span className="text-cyan-400 font-bold">4,820</span>
@@ -86,7 +92,6 @@ function DashboardLayout() {
             <span className="text-emerald-400 text-[10px] font-bold">(+12)</span>
           </div>
 
-          {/* N-1 Status */}
           <div className="flex items-center gap-2 bg-[#0e131f] border border-white/10 px-3 py-1 rounded-md">
             <span className="text-[10px] text-gray-400 uppercase">N-1 Status:</span>
             <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-[9px] px-1.5 py-0.5 rounded font-bold uppercase">
@@ -94,81 +99,34 @@ function DashboardLayout() {
             </span>
           </div>
 
-          {/* Grid Model & Latency */}
           <div className="flex items-center gap-1.5 bg-[#0e131f] border border-white/10 px-3 py-1 rounded-md text-[11px] text-gray-300">
             <Radio className="w-3 h-3 text-cyan-400" />
-            <span>IEEE 39-Bus</span>
-            <span className="text-gray-400 text-[10px]">[120ms Latency]</span>
+            <span>IEEE 39-Bus [120ms Latency]</span>
           </div>
-
-          {/* Sim Engine Status */}
-          <div className="flex items-center gap-1.5 bg-[#0e131f] border border-white/10 px-3 py-1 rounded-md text-[11px]">
-            <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
-            <span className="text-gray-400 text-[10px] uppercase">Sim Engine:</span>
-            <span className="text-cyan-300 font-bold text-[10px]">READY</span>
-          </div>
-
-          {/* Auto-OPF */}
-          <div className="flex items-center gap-1.5 bg-[#0e131f] border border-white/10 px-3 py-1 rounded-md text-[11px]">
-            <RotateCcw className="w-3 h-3 text-amber-400" />
-            <span className="text-gray-400 text-[10px] uppercase">Auto-OPF:</span>
-            <span className="text-amber-400 font-bold text-[10px]">PASSIVE</span>
-          </div>
-
         </div>
 
-        {/* Right: Navigation Tabs & Utility Buttons */}
-        <div className="flex items-center gap-2">
-          
-          <Link
-            to="/app/topology"
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all text-center leading-tight ${
-              location.pathname === '/app/topology'
-                ? 'bg-cyan-400 text-slate-950 shadow-[0_0_15px_rgba(0,229,255,0.4)]'
-                : 'text-gray-400 hover:text-white hover:bg-white/5'
-            }`}
-          >
-            Topology & Simulation
-          </Link>
+        {/* Right: Multi-Page Navigation Bar */}
+        <div className="flex items-center gap-1">
+          {navLinks.map((link) => {
+            const Icon = link.icon;
+            const isActive = location.pathname === link.to;
+            return (
+              <Link
+                key={link.to}
+                to={link.to}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                  isActive
+                    ? 'bg-cyan-400 text-slate-950 font-bold shadow-[0_0_12px_rgba(0,229,255,0.35)]'
+                    : 'text-gray-400 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-slate-950' : 'text-gray-400'}`} />
+                <span>{link.label}</span>
+              </Link>
+            );
+          })}
 
-          <Link
-            to="/app/analytics"
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
-              location.pathname === '/app/analytics'
-                ? 'bg-cyan-400 text-slate-950 font-bold shadow-[0_0_15px_rgba(0,229,255,0.4)]'
-                : 'text-gray-400 hover:text-white hover:bg-white/5'
-            }`}
-          >
-            Analytics
-          </Link>
-
-          <Link
-            to="/app/settings"
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
-              location.pathname === '/app/settings'
-                ? 'bg-cyan-400 text-slate-950 font-bold shadow-[0_0_15px_rgba(0,229,255,0.4)]'
-                : 'text-gray-400 hover:text-white hover:bg-white/5'
-            }`}
-          >
-            Settings
-          </Link>
-
-          {/* Notification Button */}
-          <button 
-            className="p-1.5 rounded-lg bg-[#0e131f] border border-white/10 text-gray-400 hover:text-white hover:border-cyan-500/40 transition-colors ml-1"
-            title="Alerts"
-          >
-            <Bell className="w-3.5 h-3.5" />
-          </button>
-
-          {/* Controls Button */}
-          <button 
-            className="p-1.5 rounded-lg bg-[#0e131f] border border-white/10 text-gray-400 hover:text-white hover:border-cyan-500/40 transition-colors"
-            title="Options"
-          >
-            <SlidersHorizontal className="w-3.5 h-3.5" />
-          </button>
-
+          <div className="w-px h-5 bg-white/10 mx-1.5" />
           <ThemeToggle />
         </div>
 
@@ -178,6 +136,8 @@ function DashboardLayout() {
       <main className="flex-1 flex overflow-hidden">
         <Routes>
           <Route path="topology" element={<TopologyPage />} />
+          <Route path="telemetry" element={<SectorTelemetryPage />} />
+          <Route path="contingency" element={<ContingencyPage />} />
           <Route path="analytics" element={<AnalyticsPage />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="topology" replace />} />

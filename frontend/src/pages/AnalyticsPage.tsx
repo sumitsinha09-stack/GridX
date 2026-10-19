@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { BarChart, Activity, Database, ShieldAlert, Clock, AlertTriangle, Layers } from 'lucide-react';
+import { Activity, Database, ShieldAlert, Clock } from 'lucide-react';
 import { 
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Legend, BarChart as RechartsBarChart, Bar
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Legend
 } from 'recharts';
 
 const trainingData = [
@@ -22,8 +22,6 @@ const trainingData = [
 export default function AnalyticsPage() {
   const [rankings, setRankings] = useState<any[]>([]);
   const [timeline, setTimeline] = useState<any[]>([]);
-  const [worstScenarios, setWorstScenarios] = useState<any[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
     const fetchAnalytics = async () => {
@@ -38,12 +36,9 @@ export default function AnalyticsPage() {
         }
         if (mcRes.data.status === 'ok') {
           setTimeline(mcRes.data.timeline || []);
-          setWorstScenarios(mcRes.data.worst_scenarios || []);
         }
       } catch (err) {
         console.error("Failed to fetch Spark analytics:", err);
-      } finally {
-        setLoading(false);
       }
     };
 
