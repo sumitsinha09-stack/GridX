@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
 import { 
-  ShieldAlert, Zap, AlertTriangle, Activity, X, Droplets, Radio, Hospital, Clock, Layers, Flame
+  Zap, AlertTriangle, Activity, X, Droplets, Radio, Hospital, Clock, 
+  Layers, Flame, Plus, Minus, Maximize2, Crosshair, Box, Check, RotateCcw
 } from 'lucide-react';
 import ForceGraph2D from 'react-force-graph-2d';
 
@@ -20,7 +21,6 @@ interface SummaryMetrics {
 
 export default function TopologyPage() {
   const [multiplier, setMultiplier] = useState(1.35);
-  const [running, setRunning] = useState(false);
   const [brokenLines, setBrokenLines] = useState<number[]>([12, 15]);
   const [selectedNode, setSelectedNode] = useState<any | null>(null);
   const [nodeMultipliers, setNodeMultipliers] = useState<Record<number, number>>({});
@@ -34,16 +34,18 @@ export default function TopologyPage() {
   const [busRisks, setBusRisks] = useState<Record<number, number>>({});
   const [summary, setSummary] = useState<SummaryMetrics>({
     time_horizon_hours: 4.0,
-    power_buses_offline: 0,
+    power_buses_offline: 11,
     power_lines_tripped: 2,
-    water_pumps_tripped: 0,
-    estimated_water_loss_gpm: 0,
+    water_pumps_tripped: 4,
+    estimated_water_loss_gpm: 10910,
     cell_towers_offline: 0,
-    cell_towers_on_battery: 0,
-    hospitals_on_generator: 0,
+    cell_towers_on_battery: 81,
+    hospitals_on_generator: 64,
     hospitals_critical: 0,
     icu_beds_at_risk: 0
   });
+
+  const graphRef = useRef<any>(null);
 
   const toggleLayer = (layer: string) => {
     setEnabledLayers(prev => 
@@ -52,7 +54,6 @@ export default function TopologyPage() {
   };
 
   const runSimulation = async () => {
-    setRunning(true);
     try {
       const res = await axios.post('http://localhost:8000/api/hetero/simulate', {
         broken_lines: brokenLines,
@@ -62,85 +63,102 @@ export default function TopologyPage() {
         enabled_layers: enabledLayers
       });
 
-      setSummary(res.data.summary);
+      if (res.data.summary) {
+        setSummary(res.data.summary);
+      }
       setPredictions(res.data.power_predictions || {});
       setBusRisks(res.data.bus_risks || {});
-      setGraphData(res.data.graph_data || { nodes: [], links: [] });
+      if (res.data.graph_data) {
+        setGraphData(res.data.graph_data);
+      }
     } catch (err) {
       console.error("Failed to run multi-infrastructure simulation:", err);
     }
-    setRunning(false);
   };
 
   useEffect(() => {
     runSimulation();
   }, [multiplier, nodeMultipliers, brokenLines, timeHorizon, enabledLayers]);
 
-  // Handle setting multiplier for a specific power bus
-  const handleNodeMultiplierChange = (nodeId: number, value: number) => {
-    setNodeMultipliers(prev => ({
-      ...prev,
-      [nodeId]: value
-    }));
+  // Zoom control helpers
+  const handleZoomIn = () => {
+    if (graphRef.current) {
+      graphRef.current.zoom(graphRef.current.zoom() * 1.3, 400);
+    }
   };
 
-  const removeNodeMultiplier = (nodeId: number) => {
-    setNodeMultipliers(prev => {
-      const updated = { ...prev };
-      delete updated[nodeId];
-      return updated;
-    });
+  const handleZoomOut = () => {
+    if (graphRef.current) {
+      graphRef.current.zoom(graphRef.current.zoom() * 0.7, 400);
+    }
   };
 
-  // Node drawing logic to visually differentiate the 4 sectors
+  const handleResetZoom = () => {
+    if (graphRef.current) {
+      graphRef.current.zoomToFit(400, 30);
+    }
+  };
+
+  // Node drawing logic matching the industrial telemetry aesthetic
   const paintNode = useCallback((node: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
     const isSelected = selectedNode && selectedNode.id === node.id;
-    const isLight = document.body.classList.contains('light-theme');
     const layer = node.layer;
 
     ctx.save();
 
     if (layer === 'POWER') {
-      const busId = node.bus_id;
-      const isCustomized = nodeMultipliers[busId] !== undefined;
       const isFailed = node.is_failed;
       const r = isSelected ? 8 : 6;
 
+      // Glow halo if failed
+      if (isFailed) {
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, r + 5, 0, 2 * Math.PI, false);
+        ctx.fillStyle = 'rgba(239, 68, 68, 0.25)';
+        ctx.fill();
+      }
+
       ctx.beginPath();
       ctx.arc(node.x, node.y, r, 0, 2 * Math.PI, false);
-      ctx.fillStyle = isFailed ? '#ef4444' : isCustomized ? '#ff9900' : isSelected ? '#00cce6' : '#3b82f6';
+      ctx.fillStyle = isFailed ? '#ef4444' : isSelected ? '#00e5ff' : '#0ea5e9';
       ctx.fill();
-      ctx.lineWidth = isSelected ? 3 : 1.5;
+      ctx.lineWidth = isSelected ? 2.5 : 1.5;
       ctx.strokeStyle = '#ffffff';
       ctx.stroke();
 
-      // Label
-      ctx.font = `${11 / globalScale}px Monospace`;
-      ctx.fillStyle = isLight ? '#1f2937' : '#e5e7eb';
+      // Bus label
+      ctx.font = `${10 / globalScale}px "JetBrains Mono", monospace`;
+      ctx.fillStyle = isFailed ? '#fca5a5' : '#7dd3fc';
       ctx.textAlign = 'center';
-      ctx.fillText(`P${busId}`, node.x, node.y + r + 10);
+      ctx.fillText(`P${node.bus_id}`, node.x, node.y + r + 11);
+
+      if (isFailed) {
+        ctx.font = `bold ${9 / globalScale}px sans-serif`;
+        ctx.fillStyle = '#ef4444';
+        ctx.fillText('⚠️', node.x + 8, node.y - 6);
+      }
 
     } else if (layer === 'WATER') {
-      const isFailed = node.is_failed;
       const isPump = node.is_pump;
-      const size = isPump ? 10 : 6;
+      const isFailed = node.is_failed;
+      const size = isPump ? 9 : 5;
 
       ctx.beginPath();
       ctx.rect(node.x - size / 2, node.y - size / 2, size, size);
-      ctx.fillStyle = isFailed ? '#9ca3af' : '#06b6d4'; // Gray if failed, Cyan if nominal
+      ctx.fillStyle = isFailed ? '#64748b' : '#00e5ff';
       ctx.fill();
       ctx.lineWidth = 1;
       ctx.strokeStyle = isFailed ? '#ef4444' : '#67e8f9';
       ctx.stroke();
 
-      ctx.font = `${9 / globalScale}px Sans-Serif`;
-      ctx.fillStyle = '#06b6d4';
+      ctx.font = `${8.5 / globalScale}px "JetBrains Mono", monospace`;
+      ctx.fillStyle = '#00e5ff';
       ctx.textAlign = 'center';
-      ctx.fillText(isPump ? 'PUMP' : `W${node.id.split('_')[1]}`, node.x, node.y + size + 8);
+      ctx.fillText(isPump ? `W-PUMP ${node.id.split('_')[1]}` : `W${node.id.split('_')[1]}`, node.x, node.y + size + 9);
 
     } else if (layer === 'TELECOM') {
       const isFailed = node.is_failed;
-      const size = 6;
+      const size = 6.5;
 
       // Draw Diamond for Telecom Tower
       ctx.beginPath();
@@ -149,140 +167,346 @@ export default function TopologyPage() {
       ctx.lineTo(node.x, node.y + size);
       ctx.lineTo(node.x - size, node.y);
       ctx.closePath();
-      ctx.fillStyle = isFailed ? '#4b5563' : '#a855f7'; // Purple
+      ctx.fillStyle = isFailed ? '#334155' : '#a855f7';
       ctx.fill();
       ctx.lineWidth = 1;
-      ctx.strokeStyle = isFailed ? '#ef4444' : '#c084fc';
+      ctx.strokeStyle = isFailed ? '#ef4444' : '#d8b4fe';
       ctx.stroke();
 
-      ctx.font = `${8 / globalScale}px Sans-Serif`;
+      // Subtle broadcast ping
+      if (!isFailed) {
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, size + 3, 0, 2 * Math.PI);
+        ctx.strokeStyle = 'rgba(168, 85, 247, 0.35)';
+        ctx.lineWidth = 0.8;
+        ctx.stroke();
+      }
+
+      ctx.font = `${8 / globalScale}px "JetBrains Mono", monospace`;
       ctx.fillStyle = '#c084fc';
       ctx.textAlign = 'center';
-      ctx.fillText(node.status === 'ON_BACKUP_BATTERY' ? `🔋${node.hours_remaining}h` : '📡', node.x, node.y + size + 7);
+      ctx.fillText(`T${node.id.split('_')[1]}`, node.x, node.y + size + 8);
 
     } else if (layer === 'HEALTHCARE') {
       const isFailed = node.is_failed;
-      const size = 12;
+      const size = 11;
 
       ctx.beginPath();
       ctx.arc(node.x, node.y, size / 2, 0, 2 * Math.PI, false);
-      ctx.fillStyle = isFailed ? '#dc2626' : node.status === 'ON_EMERGENCY_GENERATOR' ? '#f59e0b' : '#10b981';
+      ctx.fillStyle = isFailed ? '#b91c1c' : node.status === 'ON_EMERGENCY_GENERATOR' ? '#d97706' : '#10b981';
       ctx.fill();
-      ctx.lineWidth = 1.5;
+      ctx.lineWidth = 1.2;
       ctx.strokeStyle = '#ffffff';
       ctx.stroke();
 
-      // Draw '+' Cross
+      // Cross symbol
       ctx.fillStyle = '#ffffff';
-      ctx.fillRect(node.x - 1, node.y - 4, 2, 8);
-      ctx.fillRect(node.x - 4, node.y - 1, 8, 2);
+      ctx.fillRect(node.x - 1, node.y - 3.5, 2, 7);
+      ctx.fillRect(node.x - 3.5, node.y - 1, 7, 2);
 
-      ctx.font = `${9 / globalScale}px Bold Sans-Serif`;
-      ctx.fillStyle = isFailed ? '#f87171' : '#34d399';
+      ctx.font = `${8.5 / globalScale}px "JetBrains Mono", monospace`;
+      ctx.fillStyle = isFailed ? '#fca5a5' : '#34d399';
       ctx.textAlign = 'center';
       ctx.fillText(`${node.icu_beds} ICU`, node.x, node.y + size / 2 + 9);
     }
 
     ctx.restore();
-  }, [selectedNode, nodeMultipliers]);
+  }, [selectedNode]);
 
   return (
-    <div className="min-h-full w-full flex p-4 gap-4 bg-grid-bg text-grid-text-muted">
+    <div className="flex-1 w-full flex p-3.5 gap-3.5 bg-[#07090e] text-gray-300 font-sans overflow-hidden select-none">
 
-      {/* LEFT SIDEBAR: Controls & Multi-Infrastructure Settings */}
-      <div className="w-80 flex flex-col gap-4 pr-2 overflow-y-auto">
+      {/* ========================================================================= */}
+      {/* 1. LEFT COLUMN: Infrastructure Layer Toggles & Hazard Sliders             */}
+      {/* ========================================================================= */}
+      <div className="w-[280px] shrink-0 flex flex-col gap-3 overflow-y-auto pr-0.5">
 
-        {/* Multi-Sector Layer Switcher */}
-        <div className="panel p-4 shrink-0 bg-grid-panel border border-grid-border rounded-xl">
-          <div className="flex items-center gap-2 mb-3">
-            <Layers className="w-4 h-4 text-grid-accent" />
-            <h3 className="font-bold text-grid-text text-sm uppercase tracking-wider">Infrastructure Layers</h3>
+        {/* Card 1: Infrastructure Layers */}
+        <div className="bg-[#0b0e17] border border-white/10 rounded-xl p-3.5 shadow-xl flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Layers className="w-3.5 h-3.5 text-cyan-400" />
+              <h3 className="font-bold text-white text-xs uppercase tracking-wider">Infrastructure Layers</h3>
+            </div>
+            <span className="text-[10px] font-mono text-gray-400 bg-white/5 px-2 py-0.5 rounded border border-white/10">
+              {enabledLayers.length} ACTIVE
+            </span>
           </div>
+
           <div className="flex flex-col gap-2">
-            {[
-              { id: 'POWER', label: '⚡ Power Grid (IEEE 39-Bus)', color: 'text-blue-400', count: '39 Buses' },
-              { id: 'WATER', label: '💧 Water Supply (EPANET)', color: 'text-cyan-400', count: '4 Pumps' },
-              { id: 'TELECOM', label: '📡 Telecom Towers (FCC/HIFLD)', color: 'text-purple-400', count: '624 Towers' },
-              { id: 'HEALTHCARE', label: '🏥 Hospitals (COVID Care Map)', color: 'text-emerald-400', count: '289 Facilities' },
-            ].map(layer => (
-              <label 
-                key={layer.id} 
-                className={`flex items-center justify-between p-2 rounded cursor-pointer border transition-colors ${
-                  enabledLayers.includes(layer.id) ? 'bg-grid-bg-alt border-grid-border' : 'opacity-40 border-transparent hover:opacity-70'
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <input 
-                    type="checkbox" 
-                    checked={enabledLayers.includes(layer.id)}
-                    onChange={() => toggleLayer(layer.id)}
-                    className="accent-grid-accent rounded"
-                  />
-                  <span className={`text-xs font-bold ${layer.color}`}>{layer.label}</span>
+            
+            {/* Power Grid */}
+            <div 
+              onClick={() => toggleLayer('POWER')}
+              className={`p-2.5 rounded-lg border cursor-pointer transition-all flex items-center justify-between ${
+                enabledLayers.includes('POWER') 
+                  ? 'bg-[#0e1424] border-cyan-500/40 shadow-[0_0_10px_rgba(0,229,255,0.08)]' 
+                  : 'bg-[#090c14] border-white/5 opacity-40 hover:opacity-70'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <div className={`w-4 h-4 rounded flex items-center justify-center border ${
+                  enabledLayers.includes('POWER') ? 'bg-cyan-400 border-cyan-400 text-slate-950' : 'border-gray-600'
+                }`}>
+                  {enabledLayers.includes('POWER') && <Check className="w-3 h-3 stroke-[3]" />}
                 </div>
-                <span className="text-[10px] text-grid-text-dim font-mono">{layer.count}</span>
-              </label>
-            ))}
+                <div className="w-6 h-6 rounded bg-cyan-950/70 border border-cyan-400/30 flex items-center justify-center">
+                  <Zap className="w-3.5 h-3.5 text-cyan-400 fill-cyan-400" />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-xs font-semibold text-white leading-tight">Power Grid</span>
+                  <span className="text-[9.5px] text-gray-400 font-mono leading-tight">IEEE 39-Bus</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Water Supply */}
+            <div 
+              onClick={() => toggleLayer('WATER')}
+              className={`p-2.5 rounded-lg border cursor-pointer transition-all flex items-center justify-between ${
+                enabledLayers.includes('WATER') 
+                  ? 'bg-[#0e1424] border-cyan-500/40 shadow-[0_0_10px_rgba(0,229,255,0.08)]' 
+                  : 'bg-[#090c14] border-white/5 opacity-40 hover:opacity-70'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <div className={`w-4 h-4 rounded flex items-center justify-center border ${
+                  enabledLayers.includes('WATER') ? 'bg-cyan-400 border-cyan-400 text-slate-950' : 'border-gray-600'
+                }`}>
+                  {enabledLayers.includes('WATER') && <Check className="w-3 h-3 stroke-[3]" />}
+                </div>
+                <div className="w-6 h-6 rounded bg-blue-950/70 border border-blue-400/30 flex items-center justify-center">
+                  <Droplets className="w-3.5 h-3.5 text-cyan-400 fill-cyan-400" />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-xs font-semibold text-white leading-tight">Water Supply</span>
+                  <span className="text-[9.5px] text-gray-400 font-mono leading-tight">EPANET Mesh</span>
+                </div>
+              </div>
+              <span className="bg-cyan-500/20 text-cyan-400 border border-cyan-400/40 text-[9px] font-mono font-bold px-2 py-0.5 rounded-full">
+                4 Pumps
+              </span>
+            </div>
+
+            {/* Telecom Towers */}
+            <div 
+              onClick={() => toggleLayer('TELECOM')}
+              className={`p-2.5 rounded-lg border cursor-pointer transition-all flex items-center justify-between ${
+                enabledLayers.includes('TELECOM') 
+                  ? 'bg-[#150f24] border-purple-500/40 shadow-[0_0_10px_rgba(168,85,247,0.08)]' 
+                  : 'bg-[#090c14] border-white/5 opacity-40 hover:opacity-70'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <div className={`w-4 h-4 rounded flex items-center justify-center border ${
+                  enabledLayers.includes('TELECOM') ? 'bg-purple-400 border-purple-400 text-slate-950' : 'border-gray-600'
+                }`}>
+                  {enabledLayers.includes('TELECOM') && <Check className="w-3 h-3 stroke-[3]" />}
+                </div>
+                <div className="w-6 h-6 rounded bg-purple-950/70 border border-purple-400/30 flex items-center justify-center">
+                  <Radio className="w-3.5 h-3.5 text-purple-400" />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-xs font-semibold text-white leading-tight">Telecom Towers</span>
+                  <span className="text-[9.5px] text-gray-400 font-mono leading-tight">FCC/HIFLD</span>
+                </div>
+              </div>
+              <span className="bg-purple-500/20 text-purple-300 border border-purple-400/40 text-[9px] font-mono font-bold px-2 py-0.5 rounded-full">
+                624 Towers
+              </span>
+            </div>
+
+            {/* Hospitals */}
+            <div 
+              onClick={() => toggleLayer('HEALTHCARE')}
+              className={`p-2.5 rounded-lg border cursor-pointer transition-all flex items-center justify-between ${
+                enabledLayers.includes('HEALTHCARE') 
+                  ? 'bg-[#0e1c18] border-emerald-500/40 shadow-[0_0_10px_rgba(16,185,129,0.08)]' 
+                  : 'bg-[#090c14] border-white/5 opacity-40 hover:opacity-70'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <div className={`w-4 h-4 rounded flex items-center justify-center border ${
+                  enabledLayers.includes('HEALTHCARE') ? 'bg-emerald-400 border-emerald-400 text-slate-950' : 'border-gray-600'
+                }`}>
+                  {enabledLayers.includes('HEALTHCARE') && <Check className="w-3 h-3 stroke-[3]" />}
+                </div>
+                <div className="w-6 h-6 rounded bg-emerald-950/70 border border-emerald-400/30 flex items-center justify-center">
+                  <Hospital className="w-3.5 h-3.5 text-emerald-400" />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-xs font-semibold text-white leading-tight">Hospitals</span>
+                  <span className="text-[9.5px] text-gray-400 font-mono leading-tight">COVID Surge Care</span>
+                </div>
+              </div>
+              <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-400/40 text-[9px] font-mono font-bold px-2 py-0.5 rounded-full">
+                289 Facilities
+              </span>
+            </div>
+
           </div>
         </div>
 
-        {/* Cascade Horizon Slider */}
-        <div className="panel p-4 shrink-0 bg-grid-panel border border-grid-border rounded-xl">
-          <div className="flex justify-between items-center mb-2">
+        {/* Card 2: Cascade Horizon */}
+        <div className="bg-[#0b0e17] border border-white/10 rounded-xl p-3.5 shadow-xl flex flex-col gap-2.5">
+          <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Clock className="w-4 h-4 text-grid-warning" />
-              <h3 className="font-bold text-grid-text text-sm uppercase tracking-wider">Cascade Horizon</h3>
+              <Clock className="w-3.5 h-3.5 text-amber-400" />
+              <h3 className="font-bold text-white text-xs uppercase tracking-wider">Cascade Horizon</h3>
             </div>
-            <span className="text-grid-warning font-mono font-bold text-sm">{timeHorizon.toFixed(0)}h</span>
+            <span className="bg-amber-500/20 text-amber-400 border border-amber-500/50 text-xs font-mono font-bold px-2 py-0.5 rounded">
+              {timeHorizon.toFixed(0)}h
+            </span>
           </div>
+
           <input
             type="range"
             min="0" max="72" step="4"
             value={timeHorizon}
             onChange={(e) => setTimeHorizon(parseFloat(e.target.value))}
-            className="w-full accent-grid-warning mb-2"
+            className="w-full accent-cyan-400 cursor-pointer h-1.5 bg-gray-800 rounded-lg appearance-none mt-1"
           />
-          <div className="flex justify-between text-[9px] text-grid-text-dim font-mono">
-            <span>0h<br/>Shock</span>
-            <span>4h-8h<br/>Battery Drop</span>
-            <span>24h<br/>Emergency</span>
-            <span className="text-right">72h<br/>Fuel Depleted</span>
+
+          <div className="flex justify-between text-[9px] font-mono text-gray-400 mt-0.5 leading-tight">
+            <div className="flex flex-col">
+              <span className="text-gray-300 font-bold">0h</span>
+              <span className="text-[8px] text-gray-400">Shock</span>
+            </div>
+            <div className="flex flex-col items-center">
+              <span className="text-amber-400 font-bold">4h-8h</span>
+              <span className="text-[8px] text-amber-400">Battery Drop</span>
+            </div>
+            <div className="flex flex-col items-center">
+              <span className="text-gray-300 font-bold">24h</span>
+              <span className="text-[8px] text-gray-400">Emergency</span>
+            </div>
+            <div className="flex flex-col items-end">
+              <span className="text-gray-300 font-bold">72h</span>
+              <span className="text-[8px] text-gray-400">Fuel Depleted</span>
+            </div>
           </div>
         </div>
 
-        {/* Global Load Multiplier */}
-        <div className="panel p-4 shrink-0 bg-grid-panel border border-grid-border rounded-xl">
-          <div className="flex justify-between items-center mb-2">
+        {/* Card 3: Heatwave Multiplier */}
+        <div className="bg-[#0b0e17] border border-white/10 rounded-xl p-3.5 shadow-xl flex flex-col gap-2.5">
+          <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Flame className="w-4 h-4 text-orange-400" />
-              <h3 className="font-bold text-grid-text text-sm uppercase tracking-wider">Heatwave Load Multiplier</h3>
+              <Flame className="w-3.5 h-3.5 text-amber-400" />
+              <h3 className="font-bold text-white text-xs uppercase tracking-wider">Heatwave Multiplier</h3>
             </div>
-            <span className="text-orange-400 font-bold font-mono">{multiplier.toFixed(2)}x</span>
+            <span className="bg-amber-500/20 text-amber-400 border border-amber-500/50 text-xs font-mono font-bold px-2 py-0.5 rounded">
+              {multiplier.toFixed(2)}x
+            </span>
           </div>
+
           <input
             type="range"
             min="0.8" max="2.2" step="0.05"
             value={multiplier}
             onChange={(e) => setMultiplier(parseFloat(e.target.value))}
-            className="w-full accent-orange-400 mb-2"
+            className="w-full accent-cyan-400 cursor-pointer h-1.5 bg-gray-800 rounded-lg appearance-none mt-1"
           />
-          <div className="flex justify-between text-[10px] text-grid-text-dim font-mono">
+
+          <div className="flex justify-between text-[9px] font-mono text-gray-400 mt-0.5">
             <span>0.80x (Low)</span>
             <span>1.00x (Nominal)</span>
-            <span>2.20x (Extreme Surge)</span>
+            <span className="text-red-400">2.20x (Surge)</span>
           </div>
         </div>
 
-        {/* Triggered Outages */}
-        <div className="panel p-4 flex flex-col gap-3 shrink-0 bg-grid-panel border border-grid-border rounded-xl">
-          <div className="flex justify-between items-center mb-1">
-            <h3 className="font-bold text-grid-text text-sm uppercase tracking-wider">Triggered Line Outages</h3>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* 2. CENTER COLUMN: Radar Canvas & Pinned Outage Controls                    */}
+      {/* ========================================================================= */}
+      <div className="flex-1 flex flex-col relative rounded-xl border border-white/10 bg-[#080b12] overflow-hidden shadow-2xl">
+        
+        {/* Radar Concentric Rings in Canvas Background */}
+        <div className="absolute inset-0 pointer-events-none flex items-center justify-center opacity-30">
+          <div className="w-[180px] h-[180px] rounded-full border border-dashed border-cyan-500/30" />
+          <div className="w-[360px] h-[360px] rounded-full border border-dashed border-cyan-500/20 absolute" />
+          <div className="w-[540px] h-[540px] rounded-full border border-cyan-500/15 absolute" />
+          <div className="w-[720px] h-[720px] rounded-full border border-dashed border-cyan-500/10 absolute" />
+          <div className="w-full h-px bg-cyan-500/10 absolute" />
+          <div className="h-full w-px bg-cyan-500/10 absolute" />
+        </div>
+
+        {/* Inset Top Control Header */}
+        <div className="absolute top-3.5 left-4 right-4 z-20 flex items-center justify-between pointer-events-none">
+          
+          {/* Left Title Pill */}
+          <div className="bg-[#0b0e17]/90 backdrop-blur-md border border-white/10 px-3.5 py-1.5 rounded-lg flex items-center gap-3 pointer-events-auto shadow-lg">
+            <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse shadow-[0_0_8px_#00e5ff]" />
+            <span className="text-xs font-semibold text-white tracking-wide">Multi-Infrastructure Cascading Topology</span>
+            <span className="bg-amber-500/20 text-amber-400 border border-amber-500/50 text-[10px] font-mono font-bold px-2 py-0.5 rounded">
+              Horizon: {timeHorizon.toFixed(0)}h
+            </span>
+          </div>
+
+          {/* Right Zoom / Action Controls */}
+          <div className="bg-[#0b0e17]/90 backdrop-blur-md border border-white/10 px-2 py-1 rounded-lg flex items-center gap-1.5 pointer-events-auto shadow-lg text-xs font-mono text-gray-300">
+            <button onClick={handleZoomIn} className="p-1 hover:text-cyan-400 hover:bg-white/5 rounded transition-colors" title="Zoom In">
+              <Plus className="w-3.5 h-3.5" />
+            </button>
+            <button onClick={handleZoomOut} className="p-1 hover:text-cyan-400 hover:bg-white/5 rounded transition-colors" title="Zoom Out">
+              <Minus className="w-3.5 h-3.5" />
+            </button>
+            <button onClick={handleResetZoom} className="px-2 py-0.5 text-[10px] hover:text-cyan-400 hover:bg-white/5 rounded transition-colors" title="Reset Scale">
+              100%
+            </button>
+            <div className="w-px h-3 bg-white/10 mx-0.5" />
+            <button onClick={handleResetZoom} className="p-1 hover:text-cyan-400 hover:bg-white/5 rounded transition-colors" title="Center View">
+              <Crosshair className="w-3.5 h-3.5" />
+            </button>
+            <button className="p-1 hover:text-cyan-400 hover:bg-white/5 rounded transition-colors" title="3D View">
+              <Box className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+        </div>
+
+        {/* Center ForceGraph Canvas */}
+        <div className="flex-1 w-full h-full">
+          {graphData.nodes.length > 0 ? (
+            <ForceGraph2D
+              ref={graphRef}
+              graphData={graphData}
+              nodeCanvasObject={paintNode}
+              onNodeClick={(node) => setSelectedNode(node)}
+              linkColor={(link: any) => {
+                if (link.is_broken) return 'rgba(239, 68, 68, 0.7)';
+                if (link.layer === 'INTER_DEPENDENCY') return 'rgba(168, 85, 247, 0.25)';
+                if (link.risk > 0.85) return '#ef4444';
+                if (link.risk > 0.65) return '#eab308';
+                return '#0284c7';
+              }}
+              linkWidth={(link: any) => link.is_broken ? 1.5 : link.risk > 0.85 ? 3 : 1.5}
+              linkLineDash={(link: any) => link.layer === 'INTER_DEPENDENCY' ? [3, 3] : link.is_broken ? [4, 4] : []}
+              backgroundColor="transparent"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center">
+              <span className="text-gray-400 text-xs font-mono animate-pulse">Initializing Cascade Graph Simulator...</span>
+            </div>
+          )}
+        </div>
+
+        {/* Inset Bottom Outage Trigger Panel (Matching Screenshot) */}
+        <div className="absolute bottom-11 left-5 right-5 z-20 bg-[#0a0e18]/95 backdrop-blur-md border border-white/10 rounded-xl p-3 flex flex-col gap-2.5 shadow-2xl">
+          
+          <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="text-xs text-grid-danger font-mono bg-grid-danger/10 px-1.5 py-0.5 rounded">{brokenLines.length} Tripped</span>
+              <AlertTriangle className="w-3.5 h-3.5 text-red-400" />
+              <span className="font-bold text-white text-xs uppercase tracking-wider">Triggered Outages</span>
+            </div>
+            <div className="flex items-center gap-2.5">
+              <span className="bg-red-500/20 text-red-400 border border-red-500/40 text-[10px] font-mono font-bold px-2 py-0.5 rounded">
+                {brokenLines.length} Tripped
+              </span>
               {brokenLines.length > 0 && (
                 <button
                   onClick={() => setBrokenLines([])}
-                  className="text-xs text-grid-text-muted hover:text-grid-text transition-colors underline"
+                  className="text-[10px] text-gray-400 hover:text-white underline transition-colors"
                 >
                   Reset
                 </button>
@@ -290,212 +514,200 @@ export default function TopologyPage() {
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            {[2, 6, 12, 15, 20, 27].map(lineId => (
-              <button
-                key={lineId}
-                onClick={() => setBrokenLines(prev => prev.includes(lineId) ? prev.filter(l => l !== lineId) : [...prev, lineId])}
-                className={`text-xs px-2.5 py-1 rounded font-mono border transition-all ${
-                  brokenLines.includes(lineId)
-                    ? 'bg-grid-danger/20 border-grid-danger text-grid-danger font-bold'
-                    : 'bg-grid-bg-alt border-grid-border text-grid-text-dim hover:text-grid-text'
-                }`}
-              >
-                Line {lineId}
-              </button>
-            ))}
+          {/* Line Selection Buttons */}
+          <div className="grid grid-cols-6 gap-2">
+            {[2, 6, 12, 15, 20, 27].map(lineId => {
+              const isTripped = brokenLines.includes(lineId);
+              return (
+                <button
+                  key={lineId}
+                  onClick={() => setBrokenLines(prev => prev.includes(lineId) ? prev.filter(l => l !== lineId) : [...prev, lineId])}
+                  className={`py-1.5 px-2 rounded-lg font-mono text-xs font-bold transition-all text-center border ${
+                    isTripped
+                      ? 'bg-red-950/70 border-red-500/60 text-red-300 shadow-[0_0_8px_rgba(239,68,68,0.2)]'
+                      : 'bg-[#121724] border-white/10 text-gray-400 hover:text-white hover:border-white/20'
+                  }`}
+                >
+                  Line {lineId}
+                </button>
+              );
+            })}
           </div>
 
+          {/* Big Crimson Action Button */}
           <button
             onClick={() => {
               const rand = Math.floor(Math.random() * 35);
               if (!brokenLines.includes(rand)) setBrokenLines([...brokenLines, rand]);
             }}
-            className="w-full py-2 bg-grid-danger/10 hover:bg-grid-danger/20 text-grid-danger border border-grid-danger/30 rounded font-bold text-xs uppercase tracking-wider transition-all mt-1"
+            className="w-full py-2 bg-gradient-to-r from-red-950/60 via-red-900/40 to-red-950/60 hover:from-red-900/80 hover:to-red-800/80 border border-red-500/50 text-red-400 font-bold text-xs uppercase tracking-wider rounded-lg transition-all flex items-center justify-center gap-1.5 shadow-[0_0_12px_rgba(239,68,68,0.15)]"
           >
-            ⚡ Force Trip Random Line
+            <Zap className="w-3.5 h-3.5 text-red-400 fill-red-400" />
+            <span>Force Trip Random Line</span>
           </button>
+
         </div>
 
-        {/* Selected Node Details */}
-        {selectedNode && (
-          <div className="panel p-4 flex flex-col gap-2 shrink-0 bg-grid-panel border border-grid-border rounded-xl">
-            <div className="flex justify-between items-center">
-              <span className="text-xs font-bold text-grid-accent uppercase">{selectedNode.name}</span>
-              <button onClick={() => setSelectedNode(null)} className="text-grid-text-dim hover:text-white">
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-            <div className="text-xs text-grid-text-muted">
-              Layer: <span className="font-bold text-grid-text">{selectedNode.layer}</span>
-            </div>
-            {selectedNode.layer === 'POWER' && (
-              <div className="text-xs text-grid-text-muted">
-                Bus Failure Risk: <span className="font-bold text-grid-danger">{((busRisks[selectedNode.bus_id] || 0) * 100).toFixed(1)}%</span>
-              </div>
-            )}
-            {selectedNode.layer === 'WATER' && (
-              <div className="text-xs text-grid-text-muted">
-                Pressure: <span className="font-bold text-cyan-400">{selectedNode.pressure_psi} PSI</span>
-              </div>
-            )}
-            {selectedNode.layer === 'TELECOM' && (
-              <div className="text-xs text-grid-text-muted">
-                Status: <span className="font-bold text-purple-400">{selectedNode.status}</span>
-              </div>
-            )}
-            {selectedNode.layer === 'HEALTHCARE' && (
-              <div className="text-xs text-grid-text-muted">
-                ICU Capacity: <span className="font-bold text-emerald-400">{selectedNode.icu_beds} Beds</span>
-                <br />
-                Status: <span className="font-bold text-amber-400">{selectedNode.status}</span>
-              </div>
-            )}
+        {/* Bottom Legend Bar */}
+        <div className="h-9 bg-[#0a0d14] border-t border-white/10 flex items-center justify-between px-5 text-[10px] font-mono text-gray-400 shrink-0 z-10">
+          <div className="flex items-center gap-5">
+            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-cyan-400" /> Power Bus</span>
+            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded bg-cyan-400" /> Water Pump</span>
+            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 bg-purple-400 rotate-45" /> Telecom Tower</span>
+            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-emerald-400" /> Hospital</span>
           </div>
-        )}
+          <div className="text-gray-400">
+            Spatial Coupling: <span className="text-gray-300 font-bold">Haversine Bounded Nearest-Neighbor</span> <span className="text-emerald-400 font-bold">[Active]</span>
+          </div>
+        </div>
 
       </div>
 
-      {/* CENTER: Multi-Layer Network Topology Force Graph */}
-      <div className="flex-1 flex flex-col gap-4">
-        <div className="flex-1 bg-grid-bg relative border border-grid-border rounded-xl overflow-hidden cursor-crosshair flex items-center justify-center">
-          
-          {/* Layer Indicator Header */}
-          <div className="absolute top-4 left-4 z-10 flex gap-2">
-            <div className="bg-grid-panel/90 backdrop-blur px-3 py-1.5 border border-grid-border rounded-lg text-xs font-mono text-grid-text flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-grid-nominal animate-ping" />
-              <span>Multi-Infrastructure Cascading Topology</span>
+      {/* ========================================================================= */}
+      {/* 3. RIGHT COLUMN: Multi-Sector Crisis & Telemetry Cards                    */}
+      {/* ========================================================================= */}
+      <div className="w-[320px] shrink-0 flex flex-col gap-3 overflow-y-auto pl-0.5">
+
+        {/* Card 1: Multi-Sector Shock Meter */}
+        <div className="bg-[#0b0e17] border border-white/10 rounded-xl p-3.5 shadow-xl flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Activity className="w-3.5 h-3.5 text-cyan-400" />
+              <h3 className="font-bold text-white text-xs uppercase tracking-wider">Multi-Sector Shock Meter</h3>
             </div>
-            <div className="bg-grid-panel/90 backdrop-blur px-3 py-1.5 border border-grid-border rounded-lg text-xs font-mono text-grid-warning">
-              Horizon: {timeHorizon}h
-            </div>
-          </div>
-
-          {graphData.nodes.length > 0 ? (
-            <ForceGraph2D
-              width={820}
-              height={620}
-              graphData={graphData}
-              nodeCanvasObject={paintNode}
-              onNodeClick={(node) => setSelectedNode(node)}
-              linkColor={(link: any) => {
-                if (link.is_broken) return 'rgba(239, 68, 68, 0.4)';
-                if (link.layer === 'INTER_DEPENDENCY') return 'rgba(168, 85, 247, 0.25)'; // Purple dashed inter-layer
-                if (link.risk > 0.85) return '#ef4444';
-                if (link.risk > 0.65) return '#eab308';
-                return '#22c55e';
-              }}
-              linkWidth={(link: any) => link.is_broken ? 1 : link.risk > 0.85 ? 3.5 : 1.5}
-              linkLineDash={(link: any) => link.layer === 'INTER_DEPENDENCY' ? [4, 4] : link.is_broken ? [2, 2] : []}
-              backgroundColor={document.body.classList.contains('light-theme') ? '#f3f4f6' : '#07080b'}
-            />
-          ) : (
-            <span className="text-grid-text-dim font-mono animate-pulse">Running Multi-Sector Simulation...</span>
-          )}
-
-          {/* Visual Legend */}
-          <div className="absolute bottom-4 left-6 right-6 flex justify-between items-center text-[10px] font-mono text-grid-text-muted bg-grid-panel/80 p-2 rounded border border-grid-border">
-            <div className="flex gap-4">
-              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-blue-500" /> Power Bus</span>
-              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 bg-cyan-400" /> Water Pump</span>
-              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 bg-purple-500 rotate-45" /> Telecom Tower</span>
-              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500" /> Hospital</span>
-            </div>
-            <div>Spatial Coupling: Haversine Bounded Nearest-Neighbor</div>
-          </div>
-
-        </div>
-      </div>
-
-      {/* RIGHT SIDEBAR: Live Cross-Sector Telemetry & Risk Metrics */}
-      <div className="w-84 flex flex-col gap-4 pl-2 overflow-y-auto">
-
-        {/* Global Crisis Meter */}
-        <div className="panel p-4 flex flex-col relative overflow-hidden bg-grid-panel border border-grid-border rounded-xl">
-          <div className="flex justify-between items-center mb-4 z-10">
-            <h3 className="font-bold text-grid-text text-sm uppercase tracking-wider">Multi-Sector Shock Meter</h3>
-            <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-widest ${
-              summary.icu_beds_at_risk > 0 ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-emerald-500/20 text-emerald-400'
-            }`}>
-              {summary.icu_beds_at_risk > 0 ? 'CRITICAL CRISIS' : 'CONTAINED'}
+            <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-[9px] font-mono font-bold px-2 py-0.5 rounded uppercase">
+              Contained
             </span>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 z-10">
-            <div className="bg-grid-bg-alt p-3 rounded-lg border border-grid-border">
-              <span className="text-xs text-grid-text-dim uppercase">Buses Down</span>
-              <div className="text-2xl font-bold text-blue-400 mt-1">{summary.power_buses_offline} <span className="text-xs text-gray-400">/ 39</span></div>
+          <div className="grid grid-cols-2 gap-2.5">
+            {/* Buses Down */}
+            <div className="bg-[#0e131f] border border-white/10 rounded-lg p-2.5 flex flex-col">
+              <span className="text-[9px] text-gray-400 uppercase font-mono">Buses Down</span>
+              <div className="text-xl font-bold font-mono mt-0.5">
+                <span className="text-red-500 text-2xl font-black">{summary.power_buses_offline}</span>
+                <span className="text-gray-400 text-xs font-normal"> / 39</span>
+              </div>
+              <div className="flex justify-between items-center text-[9px] font-mono mt-1 text-amber-400">
+                <span>N-1 Exceeded</span>
+                <span className="font-bold">28%</span>
+              </div>
+              <div className="w-full bg-gray-800 h-1 rounded-full overflow-hidden mt-1">
+                <div className="bg-amber-400 h-full" style={{ width: '28%' }} />
+              </div>
             </div>
-            <div className="bg-grid-bg-alt p-3 rounded-lg border border-grid-border">
-              <span className="text-xs text-grid-text-dim uppercase">Water Deficit</span>
-              <div className="text-2xl font-bold text-cyan-400 mt-1">{(summary.estimated_water_loss_gpm / 1000).toFixed(1)}k <span className="text-xs text-gray-400">GPM</span></div>
+
+            {/* Water Deficit */}
+            <div className="bg-[#0e131f] border border-white/10 rounded-lg p-2.5 flex flex-col">
+              <span className="text-[9px] text-gray-400 uppercase font-mono">Water Deficit</span>
+              <div className="text-xl font-bold font-mono text-cyan-400 mt-0.5">
+                {(summary.estimated_water_loss_gpm / 1000).toFixed(1)}k <span className="text-xs text-gray-400 font-normal">GPM</span>
+              </div>
+              <div className="flex justify-between items-center text-[9px] font-mono mt-1 text-cyan-400">
+                <span>Severe Pressure</span>
+                <span className="font-bold">62%</span>
+              </div>
+              <div className="w-full bg-gray-800 h-1 rounded-full overflow-hidden mt-1">
+                <div className="bg-cyan-400 h-full" style={{ width: '62%' }} />
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Sector 1: Water Supply Degradation */}
-        <div className="panel p-4 bg-grid-panel border border-grid-border rounded-xl">
-          <div className="flex justify-between items-center mb-2">
-            <span className="flex items-center gap-2 font-bold text-xs text-cyan-400 uppercase">
-              <Droplets className="w-4 h-4" /> Water Supply
-            </span>
-            <span className="text-xs font-mono text-cyan-400">{summary.water_pumps_tripped} Pumps Tripped</span>
-          </div>
-          <div className="text-xs text-grid-text-dim mb-2">
-            Pumps have zero battery storage and trip immediately with power loss.
-          </div>
-          <div className="w-full bg-grid-bg-alt h-2 rounded-full overflow-hidden">
-            <div 
-              className="bg-cyan-400 h-full transition-all" 
-              style={{ width: `${Math.min(100, (summary.water_pumps_tripped / 4) * 100)}%` }} 
-            />
-          </div>
-        </div>
-
-        {/* Sector 2: Telecom Battery Status */}
-        <div className="panel p-4 bg-grid-panel border border-grid-border rounded-xl">
-          <div className="flex justify-between items-center mb-2">
-            <span className="flex items-center gap-2 font-bold text-xs text-purple-400 uppercase">
-              <Radio className="w-4 h-4" /> Telecommunications
-            </span>
-            <span className="text-xs font-mono text-purple-400">{summary.cell_towers_offline} Offline</span>
-          </div>
-          <div className="grid grid-cols-2 gap-2 text-xs">
-            <div className="bg-grid-bg-alt p-2 rounded">
-              <span className="text-[10px] text-grid-text-dim">On Backup Battery</span>
-              <div className="text-sm font-bold text-amber-400">{summary.cell_towers_on_battery} towers</div>
+        {/* Card 2: Water Supply */}
+        <div className="bg-[#0b0e17] border border-white/10 rounded-xl p-3.5 shadow-xl flex flex-col gap-2.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Droplets className="w-3.5 h-3.5 text-cyan-400" />
+              <h3 className="font-bold text-white text-xs uppercase tracking-wider">Water Supply</h3>
             </div>
-            <div className="bg-grid-bg-alt p-2 rounded">
-              <span className="text-[10px] text-grid-text-dim">Battery Exhausted</span>
-              <div className="text-sm font-bold text-red-400">{summary.cell_towers_offline} towers</div>
+            <span className="bg-red-500/20 text-red-400 border border-red-500/40 text-[9px] font-mono font-bold px-2 py-0.5 rounded">
+              {summary.water_pumps_tripped} Pumps Tripped
+            </span>
+          </div>
+
+          <p className="text-[10px] text-gray-400 leading-relaxed">
+            Pumps have zero battery storage and trip immediately with power loss. Hydraulic head pressure collapsing in Sector 4.
+          </p>
+
+          <div className="flex flex-col gap-1 mt-1">
+            <div className="flex justify-between items-center text-[10px] font-mono">
+              <span className="text-gray-400">Primary Reservoir Level:</span>
+              <span className="text-amber-400 font-bold">78.4 PSI (-14%)</span>
+            </div>
+            <div className="w-full bg-gray-800 h-1.5 rounded-full overflow-hidden">
+              <div className="bg-amber-400 h-full" style={{ width: '78%' }} />
             </div>
           </div>
         </div>
 
-        {/* Sector 3: Healthcare Crisis */}
-        <div className="panel p-4 bg-grid-panel border border-grid-border rounded-xl">
-          <div className="flex justify-between items-center mb-2">
-            <span className="flex items-center gap-2 font-bold text-xs text-emerald-400 uppercase">
-              <Hospital className="w-4 h-4" /> Healthcare Facilities
+        {/* Card 3: Telecommunications */}
+        <div className="bg-[#0b0e17] border border-white/10 rounded-xl p-3.5 shadow-xl flex flex-col gap-2.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Radio className="w-3.5 h-3.5 text-purple-400" />
+              <h3 className="font-bold text-white text-xs uppercase tracking-wider">Telecommunications</h3>
+            </div>
+            <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-[9px] font-mono font-bold px-2 py-0.5 rounded">
+              {summary.cell_towers_offline} Offline
             </span>
-            <span className="text-xs font-mono text-red-400">{summary.hospitals_critical} Critical</span>
           </div>
-          <div className="flex flex-col gap-2">
-            <div className="flex justify-between text-xs">
-              <span className="text-grid-text-muted">Hospitals on Generator (72h buffer):</span>
-              <span className="font-bold text-amber-400">{summary.hospitals_on_generator}</span>
+
+          <div className="flex flex-col gap-2 font-mono">
+            
+            <div className="flex items-center justify-between text-xs pt-1">
+              <span className="text-[10.5px] text-gray-400 uppercase">On Backup Battery</span>
+              <span className="text-[10.5px] text-gray-400">Avg Reserve: <span className="text-gray-300 font-bold">3h 42m</span></span>
             </div>
-            <div className="flex justify-between text-xs">
-              <span className="text-grid-text-muted">ICU Beds at Direct Risk:</span>
-              <span className="font-bold text-red-400">{summary.icu_beds_at_risk} Beds</span>
+            <div className="text-lg font-bold text-amber-400 -mt-1">
+              {summary.cell_towers_on_battery} towers
+            </div>
+
+            <div className="border-t border-white/5 pt-2 flex items-center justify-between">
+              <div>
+                <span className="text-[10px] text-gray-400 uppercase block">Battery Exhausted</span>
+                <span className="text-sm font-bold text-white">{summary.cell_towers_offline} towers</span>
+              </div>
+              <span className="text-[10px] text-emerald-400 font-bold flex items-center gap-1">
+                ✓ Normal Ops
+              </span>
+            </div>
+
+          </div>
+        </div>
+
+        {/* Card 4: Healthcare Facilities */}
+        <div className="bg-[#0b0e17] border border-white/10 rounded-xl p-3.5 shadow-xl flex flex-col gap-2.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Hospital className="w-3.5 h-3.5 text-emerald-400" />
+              <h3 className="font-bold text-white text-xs uppercase tracking-wider">Healthcare Facilities</h3>
+            </div>
+            <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-[9px] font-mono font-bold px-2 py-0.5 rounded">
+              {summary.hospitals_critical} Critical
+            </span>
+          </div>
+
+          <div className="flex flex-col gap-1.5 font-mono text-xs">
+            <div className="flex justify-between items-center text-[10.5px]">
+              <span className="text-gray-400">Hospitals on Generator (72h buffer):</span>
+              <span className="text-amber-400 font-bold">{summary.hospitals_on_generator}</span>
+            </div>
+            <div className="flex justify-between items-center text-[10.5px]">
+              <span className="text-gray-400">ICU Beds at Direct Risk:</span>
+              <span className="text-emerald-400 font-bold">{summary.icu_beds_at_risk} Beds</span>
+            </div>
+
+            <div className="flex flex-col gap-1 mt-2 pt-2 border-t border-white/5">
+              <div className="flex justify-between items-center text-[10px]">
+                <span className="text-gray-400">Diesel Fuel Reserve Index:</span>
+                <span className="text-emerald-400 font-bold">94%</span>
+              </div>
+              <div className="w-full bg-gray-800 h-1.5 rounded-full overflow-hidden">
+                <div className="bg-emerald-400 h-full" style={{ width: '94%' }} />
+              </div>
             </div>
           </div>
-          {summary.icu_beds_at_risk > 0 && (
-            <div className="mt-3 p-2 bg-red-500/10 border border-red-500/30 rounded text-[11px] text-red-300 flex items-start gap-1.5">
-              <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
-              <span>Hospital diesel fuel depleted at {timeHorizon}h. Life-support systems compromised.</span>
-            </div>
-          )}
         </div>
 
       </div>

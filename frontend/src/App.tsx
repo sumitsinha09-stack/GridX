@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
-import { Activity, Settings2, Zap, Sun, Moon } from 'lucide-react';
+import { Activity, Settings2, Zap, Sun, Moon, Bell, SlidersHorizontal, Radio, Cpu, RotateCcw } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -22,132 +22,179 @@ export function ThemeToggle() {
   };
 
   return (
-    <button onClick={toggle} className="ml-4 p-2 rounded-lg bg-grid-bg-alt border border-grid-border hover:bg-white/5 transition-colors text-grid-text-muted hover:text-grid-text" title="Toggle Theme">
-      {isLight ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
+    <button 
+      onClick={toggle} 
+      className="p-1.5 rounded-lg bg-[#0e131f] border border-white/10 hover:border-cyan-500/40 transition-colors text-gray-400 hover:text-white" 
+      title="Toggle Theme"
+    >
+      {isLight ? <Moon className="w-3.5 h-3.5" /> : <Sun className="w-3.5 h-3.5" />}
     </button>
   );
 }
 
-// This layout contains the complex dashboard header and telemetry bar
+// Layout matching the industrial telemetry top bar
 function DashboardLayout() {
   const location = useLocation();
 
   return (
     <motion.div
-      className="flex flex-col min-h-screen bg-grid-bg relative z-20"
-      initial={{ opacity: 0, scale: 0.95 }}
+      className="flex flex-col min-h-screen bg-[#07090e] text-gray-200 relative z-20 font-sans"
+      initial={{ opacity: 0, scale: 0.98 }}
       animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.95 }}
-      transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+      exit={{ opacity: 0, scale: 0.98 }}
+      transition={{ duration: 0.3 }}
     >
-      {/* Header */}
-      <header className="h-16 bg-grid-panel border-b border-grid-border flex items-center justify-between px-6 shrink-0 z-10">
-        <div className="flex items-center space-x-8">
-          {/* Logo (Clicking it goes back to Landing Page) */}
-          <Link to="/" className="flex items-center space-x-2 hover:opacity-80 transition-opacity">
-            <Zap className="w-6 h-6 text-grid-accent" />
+      {/* Top Telemetry Header */}
+      <header className="h-14 bg-[#0a0d14] border-b border-white/10 flex items-center justify-between px-5 shrink-0 z-30 select-none">
+        
+        {/* Left: Brand / Logo */}
+        <div className="flex items-center gap-3">
+          <Link to="/" className="flex items-center gap-2.5 hover:opacity-90 transition-opacity">
+            <div className="w-8 h-8 rounded-lg bg-cyan-950/60 border border-cyan-400/40 flex items-center justify-center shadow-[0_0_12px_rgba(0,229,255,0.25)]">
+              <Zap className="w-4 h-4 text-cyan-400 fill-cyan-400" />
+            </div>
             <div className="flex flex-col">
-              <span className="font-bold text-grid-text text-lg leading-tight tracking-wide">GridX</span>
-              <span className="text-[0.6rem] text-grid-text-dim font-mono tracking-widest uppercase">Telemetry Hub</span>
+              <div className="flex items-center gap-2">
+                <span className="font-extrabold text-white text-base tracking-wider font-sans leading-none">GRIDX</span>
+                <span className="bg-cyan-500/20 text-cyan-400 border border-cyan-400/50 text-[9px] font-mono font-bold px-1.5 py-0.5 rounded leading-none">
+                  V4.8-RT
+                </span>
+              </div>
+              <span className="text-[8.5px] text-gray-400 font-mono tracking-widest uppercase mt-0.5 leading-none">
+                Critical Infrastructure Telemetry
+              </span>
             </div>
           </Link>
-
-          {/* Core Metrics */}
-          <div className="flex items-center space-x-6 text-sm font-mono bg-grid-bg-alt px-4 py-1.5 rounded-md border border-grid-border">
-            <div className="flex flex-col">
-              <span className="text-grid-text-dim text-[10px] uppercase">Freq</span>
-              <span className="text-grid-accent font-bold">59.988 <span className="text-grid-text-muted text-xs font-sans">Hz</span></span>
-            </div>
-            <div className="w-px h-6 bg-grid-border" />
-            <div className="flex flex-col">
-              <span className="text-grid-text-dim text-[10px] uppercase">Load</span>
-              <span className="text-grid-accent font-bold">4,820 <span className="text-grid-text-muted text-xs font-sans">MW</span></span>
-            </div>
-            <div className="w-px h-6 bg-grid-border" />
-            <div className="flex items-center space-x-2">
-              <div className="w-2 h-2 rounded-full bg-grid-nominal animate-pulse" />
-              <div className="flex flex-col">
-                <span className="text-grid-text-dim text-[10px] uppercase">N-1 Status</span>
-                <span className="text-grid-nominal font-bold">NOMINAL</span>
-              </div>
-            </div>
-          </div>
         </div>
 
-        {/* NAVIGATION LINKS */}
-        <div className="flex items-center space-x-2">
+        {/* Center: Live Industrial Telemetry Badges */}
+        <div className="hidden xl:flex items-center gap-3 text-xs font-mono">
+          
+          {/* Frequency */}
+          <div className="flex items-center gap-2 bg-[#0e131f] border border-white/10 px-3 py-1 rounded-md">
+            <span className="text-[10px] text-gray-400 uppercase">Freq:</span>
+            <span className="text-cyan-400 font-bold">59.988</span>
+            <span className="text-gray-400 text-[10px]">Hz</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 shadow-[0_0_6px_#00e5ff]" />
+          </div>
+
+          {/* Load */}
+          <div className="flex items-center gap-2 bg-[#0e131f] border border-white/10 px-3 py-1 rounded-md">
+            <span className="text-[10px] text-gray-400 uppercase">Load:</span>
+            <span className="text-cyan-400 font-bold">4,820</span>
+            <span className="text-gray-400 text-[10px]">MW</span>
+            <span className="text-emerald-400 text-[10px] font-bold">(+12)</span>
+          </div>
+
+          {/* N-1 Status */}
+          <div className="flex items-center gap-2 bg-[#0e131f] border border-white/10 px-3 py-1 rounded-md">
+            <span className="text-[10px] text-gray-400 uppercase">N-1 Status:</span>
+            <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-[9px] px-1.5 py-0.5 rounded font-bold uppercase">
+              Nominal
+            </span>
+          </div>
+
+          {/* Grid Model & Latency */}
+          <div className="flex items-center gap-1.5 bg-[#0e131f] border border-white/10 px-3 py-1 rounded-md text-[11px] text-gray-300">
+            <Radio className="w-3 h-3 text-cyan-400" />
+            <span>IEEE 39-Bus</span>
+            <span className="text-gray-400 text-[10px]">[120ms Latency]</span>
+          </div>
+
+          {/* Sim Engine Status */}
+          <div className="flex items-center gap-1.5 bg-[#0e131f] border border-white/10 px-3 py-1 rounded-md text-[11px]">
+            <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+            <span className="text-gray-400 text-[10px] uppercase">Sim Engine:</span>
+            <span className="text-cyan-300 font-bold text-[10px]">READY</span>
+          </div>
+
+          {/* Auto-OPF */}
+          <div className="flex items-center gap-1.5 bg-[#0e131f] border border-white/10 px-3 py-1 rounded-md text-[11px]">
+            <RotateCcw className="w-3 h-3 text-amber-400" />
+            <span className="text-gray-400 text-[10px] uppercase">Auto-OPF:</span>
+            <span className="text-amber-400 font-bold text-[10px]">PASSIVE</span>
+          </div>
+
+        </div>
+
+        {/* Right: Navigation Tabs & Utility Buttons */}
+        <div className="flex items-center gap-2">
+          
           <Link
             to="/app/topology"
-            className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors ${location.pathname === '/app/topology' ? 'bg-grid-accent text-black' : 'text-grid-text-muted hover:text-grid-text'}`}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all text-center leading-tight ${
+              location.pathname === '/app/topology'
+                ? 'bg-cyan-400 text-slate-950 shadow-[0_0_15px_rgba(0,229,255,0.4)]'
+                : 'text-gray-400 hover:text-white hover:bg-white/5'
+            }`}
           >
             Topology & Simulation
           </Link>
+
           <Link
             to="/app/analytics"
-            className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors ${location.pathname === '/app/analytics' ? 'bg-grid-accent text-black' : 'text-grid-text-muted hover:text-grid-text'}`}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
+              location.pathname === '/app/analytics'
+                ? 'bg-cyan-400 text-slate-950 font-bold shadow-[0_0_15px_rgba(0,229,255,0.4)]'
+                : 'text-gray-400 hover:text-white hover:bg-white/5'
+            }`}
           >
             Analytics
           </Link>
+
           <Link
             to="/app/settings"
-            className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors ${location.pathname === '/app/settings' ? 'bg-grid-accent text-black' : 'text-grid-text-muted hover:text-grid-text'}`}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
+              location.pathname === '/app/settings'
+                ? 'bg-cyan-400 text-slate-950 font-bold shadow-[0_0_15px_rgba(0,229,255,0.4)]'
+                : 'text-gray-400 hover:text-white hover:bg-white/5'
+            }`}
           >
             Settings
           </Link>
-          <div className="w-px h-6 bg-grid-border mx-2" />
+
+          {/* Notification Button */}
+          <button 
+            className="p-1.5 rounded-lg bg-[#0e131f] border border-white/10 text-gray-400 hover:text-white hover:border-cyan-500/40 transition-colors ml-1"
+            title="Alerts"
+          >
+            <Bell className="w-3.5 h-3.5" />
+          </button>
+
+          {/* Controls Button */}
+          <button 
+            className="p-1.5 rounded-lg bg-[#0e131f] border border-white/10 text-gray-400 hover:text-white hover:border-cyan-500/40 transition-colors"
+            title="Options"
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5" />
+          </button>
+
           <ThemeToggle />
         </div>
+
       </header>
 
-      {/* Sub-header / Status Bar */}
-      <div className="h-8 bg-grid-panel-alt border-b border-grid-border flex items-center justify-between px-6 shrink-0 text-xs font-mono">
-        <div className="flex items-center space-x-2 text-grid-text-muted">
-          <Activity className="w-3 h-3 text-grid-accent" />
-          <span>LIVE VECTOR WAVEFRONT</span>
-          <span className="text-gray-600">|</span>
-          <span className="text-grid-text-muted">ISO-NE IEEE 39-Bus Node Feed Active [120ms Latency]</span>
-        </div>
-        <div className="flex items-center space-x-4">
-          <div className="flex items-center space-x-1.5">
-            <div className="w-1.5 h-1.5 rounded-full bg-grid-accent" />
-            <span className="text-grid-text-muted">SIM ENGINE <span className="text-grid-text">READY</span></span>
-          </div>
-          <div className="flex items-center space-x-1.5">
-            <Settings2 className="w-3 h-3 text-grid-warning" />
-            <span className="text-grid-text-muted">AUTO-OPF POLLING <span className="text-grid-warning">PASSIVE</span></span>
-          </div>
-        </div>
-      </div>
-
-      {/* Main Content Area swapped by React Router */}
-      <main className="flex-1 relative bg-grid-bg">
+      {/* Main Page Outlet */}
+      <main className="flex-1 flex overflow-hidden">
         <Routes>
-          <Route path="/" element={<Navigate to="/app/topology" replace />} />
           <Route path="topology" element={<TopologyPage />} />
           <Route path="analytics" element={<AnalyticsPage />} />
           <Route path="settings" element={<SettingsPage />} />
+          <Route path="*" element={<Navigate to="topology" replace />} />
         </Routes>
       </main>
-    </motion.div>
-  );
-}
 
-function AnimatedRoutes() {
-  const location = useLocation();
-  return (
-    <AnimatePresence mode="wait">
-      <Routes location={location} key={location.pathname.startsWith('/app') ? 'app' : 'home'}>
-        <Route path="/" element={<LandingPage />} />
-        <Route path="/app/*" element={<DashboardLayout />} />
-      </Routes>
-    </AnimatePresence>
+    </motion.div>
   );
 }
 
 export default function App() {
   return (
     <BrowserRouter>
-      <AnimatedRoutes />
+      <Routes>
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/app/*" element={<DashboardLayout />} />
+      </Routes>
     </BrowserRouter>
   );
 }
