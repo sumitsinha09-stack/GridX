@@ -1,3 +1,5 @@
+import os
+import sys
 import torch
 import torch.nn.functional as F
 from torch_geometric.nn import GATv2Conv
@@ -5,6 +7,7 @@ from torch_geometric.loader import DataLoader
 from sklearn.metrics import precision_score, recall_score, f1_score
 import numpy as np
 
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from src.process_dataset import load_cascading_data
 
 class CascadePredictor(torch.nn.Module):
@@ -117,7 +120,9 @@ def train_model():
     print(f"F1 Score (Overall balance):                            {f1:.2%}")
 
     torch.save(model.state_dict(), "trained_cascade_model_GAT.pth")
-    print("\nModel saved to 'trained_cascade_model_GAT.pth'")
+    os.makedirs("models", exist_ok=True)
+    torch.save(model.state_dict(), "models/trained_cascade_model_GAT.pth")
+    print("\nModel saved to 'models/trained_cascade_model_GAT.pth'")
 
 if __name__ == "__main__":
     train_model()

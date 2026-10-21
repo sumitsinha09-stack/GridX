@@ -77,7 +77,12 @@ def load_cascading_data(csv_file, mpc_file):
         # 3. Handle the lines that were broken to start the disaster
         init_fails = ast.literal_eval(group['initial_failures'].iloc[0])
         for broken_line in init_fails:
-            sim_edge_features[broken_line] = 0.0 # Tell the AI this line is dead
+            try:
+                b_idx = int(broken_line)
+                if b_idx < num_lines:
+                    sim_edge_features[b_idx] = 0.0 # Tell the AI this line is dead
+            except (ValueError, TypeError):
+                pass
 
         e_scaled = scaler_edges.transform(sim_edge_features)
 

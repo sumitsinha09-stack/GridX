@@ -67,8 +67,11 @@ venv.bak/
 # Project specific data and checkpoints (ignore large generated datasets & model weights)
 data/raw/*
 !data/raw/.gitkeep
+data/raw_large/*
+!data/raw_large/.gitkeep
 data/processed/*
 !data/processed/.gitkeep
+cascading_failures_dataset.csv
 models/checkpoints/*
 !models/checkpoints/.gitkeep
 *.pt
@@ -76,6 +79,8 @@ models/checkpoints/*
 *.pkl
 *.joblib
 *.onnx
+*.zip
+*.gz
 
 # Streamlit
 .streamlit/
