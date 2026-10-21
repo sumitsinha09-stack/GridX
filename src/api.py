@@ -85,10 +85,11 @@ async def simulate(req: SimulationRequest):
 # ==============================================================================
 class HeteroSimulationRequest(BaseModel):
     broken_lines: List[int] = []
+    tripped_buses: List[int] = []
     demand_multiplier: float = 1.0
     node_multipliers: Dict[int, float] = {}
     time_horizon_hours: float = 4.0
-    enabled_layers: List[str] = ["POWER", "WATER", "TELECOM", "HEALTHCARE"]
+    enabled_layers: List[str] = ["POWER", "WATER", "TELECOM", "HEALTHCARE", "TRANSPORTATION"]
 
 @app.post("/api/hetero/simulate")
 async def simulate_hetero(req: HeteroSimulationRequest):
@@ -97,6 +98,7 @@ async def simulate_hetero(req: HeteroSimulationRequest):
 
     results = hetero_engine.simulate_multisector_cascade(
         broken_lines=req.broken_lines,
+        tripped_buses=req.tripped_buses,
         demand_multiplier=req.demand_multiplier,
         node_multipliers=req.node_multipliers,
         time_horizon_hours=req.time_horizon_hours
@@ -110,24 +112,36 @@ async def simulate_hetero(req: HeteroSimulationRequest):
     if "POWER" in req.enabled_layers:
         for bus_id in range(39):
             bus_risk = results["bus_risks"].get(bus_id, 0.0)
+            telemetry = results.get("bus_telemetry", {}).get(bus_id, {})
+            is_tripped = bus_id in results.get("tripped_buses", [])
             nodes.append({
                 "id": f"P_{bus_id}",
                 "name": f"Substation {bus_id}",
                 "layer": "POWER",
                 "bus_id": bus_id,
                 "risk": bus_risk,
-                "is_failed": bus_risk >= 0.70
+                "is_failed": bus_risk >= 0.70 or is_tripped,
+                "is_tripped": is_tripped,
+                "load_percentage": telemetry.get("load_percentage", 0.0),
+                "active_power_mw": telemetry.get("active_power_mw", 0.0),
+                "voltage_norm": telemetry.get("voltage_norm", 1.0),
+                "status": telemetry.get("status", "ONLINE_NOMINAL"),
+                "connected_lines": telemetry.get("connected_lines", []),
+                "dependent_assets": telemetry.get("dependent_assets", {})
             })
 
         # Power lines (Layer 0 intra-edges)
         for line_id, (u, v) in hetero_engine.line_to_buses.items():
+            is_broken = line_id in results.get("broken_lines", req.broken_lines)
+            is_incident_tripped = (u in results.get("tripped_buses", [])) or (v in results.get("tripped_buses", []))
             links.append({
                 "source": f"P_{u}",
                 "target": f"P_{v}",
                 "layer": "POWER",
                 "line_id": line_id,
                 "risk": results["power_predictions"].get(line_id, 0.0),
-                "is_broken": line_id in req.broken_lines
+                "is_broken": is_broken,
+                "is_severed_by_bus": is_incident_tripped
             })
 
     # Layer 1: Water Supply
@@ -196,10 +210,37 @@ async def simulate_hetero(req: HeteroSimulationRequest):
                     "is_broken": h["status"] == "CRITICAL_POWER_EXHAUSTION"
                 })
 
+    # Layer 4: Transportation & Traffic Control
+    if "TRANSPORTATION" in req.enabled_layers:
+        for tr in results.get("transportation_impacts", []):
+            tr_id = tr["traffic_grid_id"]
+            nodes.append({
+                "id": tr_id,
+                "name": f"Traffic Zone {tr['power_bus_id']} ({tr['intersections_offline']} Signals)",
+                "layer": "TRANSPORTATION",
+                "intersections_offline": tr["intersections_offline"],
+                "has_electrified_transit": tr["has_electrified_transit"],
+                "status": tr["status"],
+                "is_failed": True
+            })
+            if "POWER" in req.enabled_layers:
+                links.append({
+                    "source": f"P_{tr['power_bus_id']}",
+                    "target": tr_id,
+                    "layer": "INTER_DEPENDENCY",
+                    "relation": "powers_traffic",
+                    "is_broken": True
+                })
+
     return {
         "summary": results["summary"],
         "power_predictions": results["power_predictions"],
         "bus_risks": results["bus_risks"],
+        "bus_telemetry": results.get("bus_telemetry", {}),
+        "tripped_buses": results.get("tripped_buses", []),
+        "broken_lines": results.get("broken_lines", []),
+        "transportation_impacts": results.get("transportation_impacts", []),
+        "timeline_progression": results.get("timeline_progression", []),
         "graph_data": {
             "nodes": nodes,
             "links": links

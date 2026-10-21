@@ -51,6 +51,26 @@ class MultiInfrastructureCascadeEngine:
         self.bus_to_telecom = self.telecom_deps_df.groupby("power_bus_id")
         self.bus_to_hospitals = self.hosp_deps_df.groupby("power_bus_id")
 
+        # Map each power bus to all connecting transmission lines
+        self.bus_to_lines = {bus_id: [] for bus_id in range(39)}
+        for line_id, (u, v) in self.line_to_buses.items():
+            self.bus_to_lines[u].append(line_id)
+            self.bus_to_lines[v].append(line_id)
+
+        # Pre-compute baseline electrical metrics for each bus
+        self.bus_metrics = {}
+        for bus_id in range(39):
+            p_mw = float(self.grid_ai.base_node_features[bus_id, 0])
+            q_mvar = float(self.grid_ai.base_node_features[bus_id, 1])
+            vn_kv = float(self.grid_ai.base_node_features[bus_id, 2])
+            conn_lines = self.bus_to_lines.get(bus_id, [])
+            self.bus_metrics[bus_id] = {
+                "p_mw": round(p_mw, 1),
+                "q_mvar": round(q_mvar, 1),
+                "vn_kv": round(vn_kv, 1),
+                "connected_lines": sorted(conn_lines)
+            }
+
         print("Multi-Infrastructure Cascade Engine Ready.")
 
     def compute_bus_failure_probabilities(
@@ -92,23 +112,37 @@ class MultiInfrastructureCascadeEngine:
         broken_lines: List[int],
         demand_multiplier: float = 1.0,
         node_multipliers: Optional[Dict[int, float]] = None,
-        time_horizon_hours: float = 4.0
+        time_horizon_hours: float = 4.0,
+        tripped_buses: Optional[List[int]] = None
     ) -> Dict[str, Any]:
         """
-        Executes a complete 4-sector cascading failure simulation across time.
+        Executes a complete multi-sector cascading failure simulation across time.
+        Supports both transmission line trips and direct substation node trips.
         """
         if node_multipliers is None:
             node_multipliers = {}
+        if tripped_buses is None:
+            tripped_buses = []
 
-        # 1. Run GAT Power Line Risk Inference
+        # 1. Expand node trips into incident transmission line trips
+        active_broken = set(broken_lines)
+        for b in tripped_buses:
+            for l in self.bus_to_lines.get(b, []):
+                active_broken.add(l)
+        active_broken_lines = sorted(list(active_broken))
+
+        # 2. Run GAT Power Line Risk Inference on redistributed topology
         line_predictions = self.grid_ai.predict_cascade(
-            broken_lines=broken_lines,
+            broken_lines=active_broken_lines,
             demand_multiplier=demand_multiplier,
             node_multipliers=node_multipliers
         )
 
-        # 2. Derive Bus Vulnerabilities
-        bus_risks = self.compute_bus_failure_probabilities(line_predictions, broken_lines)
+        # 3. Derive Bus Vulnerabilities
+        bus_risks = self.compute_bus_failure_probabilities(line_predictions, active_broken_lines)
+        for b in tripped_buses:
+            bus_risks[b] = 1.0
+
         failed_buses = set([b for b, r in bus_risks.items() if r >= 0.70])
 
         # 3. Simulate Layer 1: Water Supply Cascade
@@ -215,13 +249,123 @@ class MultiInfrastructureCascadeEngine:
                 "fuel_hours_remaining": round(fuel_hours_left, 1)
             })
 
-        # 6. Aggregate System-Wide Telemetry
+        # 6. Simulate Layer 3: Transportation & Traffic Control Cascade
+        traffic_intersections_offline = 0
+        transit_corridors_impacted = 0
+        transportation_impacts = []
+
+        for bus_id in range(39):
+            is_down = bus_id in failed_buses
+            num_signals = 18 if bus_id < 12 else (14 if bus_id < 26 else 10)
+            has_transit = bus_id in [3, 4, 7, 8, 15, 16, 20, 22, 35]
+            if is_down:
+                traffic_intersections_offline += num_signals
+                if has_transit:
+                    transit_corridors_impacted += 1
+                transportation_impacts.append({
+                    "traffic_grid_id": f"TRF_BUS_{bus_id}",
+                    "power_bus_id": bus_id,
+                    "intersections_offline": num_signals,
+                    "has_electrified_transit": has_transit,
+                    "status": "SIGNALS_DARK_GRIDLOCK",
+                    "severity": "CRITICAL" if num_signals >= 16 else "MODERATE"
+                })
+
+        # 7. Detailed Electrical Bus Telemetry & Load Percentages
+        bus_telemetry = {}
+        for bus_id in range(39):
+            b_meta = self.bus_metrics[bus_id]
+            p_mw = b_meta["p_mw"]
+            c_lines = b_meta["connected_lines"]
+            conn_risks = [line_predictions.get(l, 0.0) for l in c_lines]
+            avg_risk = sum(conn_risks) / max(1, len(conn_risks))
+            
+            is_tripped = bus_id in tripped_buses
+            is_failed = bus_risks.get(bus_id, 0.0) >= 0.70 or is_tripped
+
+            if is_tripped:
+                load_pct = 0.0
+                status_label = "TRIPPED / BREAKER OPEN"
+            elif is_failed:
+                load_pct = 0.0
+                status_label = "BLACKOUT / DE-ENERGIZED"
+            else:
+                base_load_pct = min(100.0, (p_mw * demand_multiplier / 522.0) * 100) if p_mw > 0 else 48.0
+                load_pct = min(100.0, round(base_load_pct * (1.0 + avg_risk * 0.45), 1))
+                status_label = "HIGH STRESS" if load_pct >= 85 else ("ELEVATED" if load_pct >= 65 else "NOMINAL")
+
+            w_count = len(self.water_deps_df[self.water_deps_df["power_bus_id"] == bus_id])
+            t_count = len(self.telecom_deps_df[self.telecom_deps_df["power_bus_id"] == bus_id])
+            h_count = len(self.hosp_deps_df[self.hosp_deps_df["power_bus_id"] == bus_id])
+            tr_count = 18 if bus_id < 12 else (14 if bus_id < 26 else 10)
+
+            bus_telemetry[bus_id] = {
+                "bus_id": bus_id,
+                "name": f"Substation {bus_id}",
+                "voltage_kv": b_meta["vn_kv"],
+                "p_mw": round(p_mw * demand_multiplier, 1),
+                "q_mvar": round(b_meta["q_mvar"] * demand_multiplier, 1),
+                "load_percentage": load_pct,
+                "status": status_label,
+                "outage_risk": round(bus_risks.get(bus_id, 0.0), 3),
+                "is_failed": is_failed,
+                "is_tripped": is_tripped,
+                "connected_lines": c_lines,
+                "dependent_water_pumps": w_count,
+                "dependent_towers": t_count,
+                "dependent_hospitals": h_count,
+                "dependent_traffic_signals": tr_count
+            }
+
+        # 8. Predictive Cascading Timeline Progression (Future Effects)
+        secondary_overloads = [l for l, r in line_predictions.items() if r > 0.70 and l not in active_broken_lines]
+
+        timeline_progression = [
+            {
+                "stage": 0,
+                "time_horizon": "t = 0h (Immediate Shock)",
+                "phase": "Primary Substation Trip & Direct Shocks",
+                "description": f"{len(tripped_buses)} substations tripped. {len(active_broken_lines)} transmission lines disconnected. Instantaneous loss of {total_pumps_down} water booster pumps ({round(total_water_deficit_gpm, 1):,} GPM deficit) and {traffic_intersections_offline} traffic signal intersections de-energized.",
+                "severity": "CRITICAL",
+                "sectors_affected": ["Power Grid", "Water Supply", "Transportation"]
+            },
+            {
+                "stage": 1,
+                "time_horizon": "t = 1h - 2h (Electrical Wave)",
+                "phase": "Dynamic Power Flow Redistribution",
+                "description": f"Grid redistribution pushes heavy currents to parallel circuits. GATv2 model predicts {len(secondary_overloads)} secondary lines operating in critical thermal overload range (>100% capacity).",
+                "severity": "HIGH",
+                "sectors_affected": ["Power Grid"]
+            },
+            {
+                "stage": 2,
+                "time_horizon": "t = 4h - 8h (Telecom Depletion)",
+                "phase": "Cellular Tower Battery Depletion",
+                "description": f"{towers_offline} cellular base stations exhaust emergency DC battery banks and go dark. {towers_on_battery} towers remaining on countdown, degrading municipal communication & SCADA telemetry.",
+                "severity": "HIGH" if towers_offline > 0 else "MODERATE",
+                "sectors_affected": ["Telecommunications"]
+            },
+            {
+                "stage": 3,
+                "time_horizon": "t = 24h - 72h (Fuel Exhaustion)",
+                "phase": "Hospital Emergency Generator Starvation",
+                "description": f"{hospitals_on_generator} hospitals running on on-site diesel backup. Extended outage beyond 72h causes fuel starvation at {hospitals_critical} hospitals, putting {icu_beds_at_risk:.0f} ICU beds at risk.",
+                "severity": "EMERGENCY" if hospitals_critical > 0 else "WARNING",
+                "sectors_affected": ["Healthcare & Emergency Services"]
+            }
+        ]
+
+        # 9. Aggregate System-Wide Telemetry
         summary_metrics = {
             "time_horizon_hours": time_horizon_hours,
             "power_buses_offline": len(failed_buses),
-            "power_lines_tripped": len(broken_lines),
+            "power_lines_tripped": len(active_broken_lines),
+            "substations_tripped": len(tripped_buses),
+            "secondary_lines_at_risk": len(secondary_overloads),
             "water_pumps_tripped": total_pumps_down,
             "estimated_water_loss_gpm": round(total_water_deficit_gpm, 1),
+            "traffic_signals_offline": traffic_intersections_offline,
+            "transit_corridors_impacted": transit_corridors_impacted,
             "cell_towers_offline": towers_offline,
             "cell_towers_on_battery": towers_on_battery,
             "hospitals_on_generator": hospitals_on_generator,
@@ -233,7 +377,12 @@ class MultiInfrastructureCascadeEngine:
             "summary": summary_metrics,
             "power_predictions": line_predictions,
             "bus_risks": bus_risks,
-            "water_impacts": water_impacts[:25], # Top subset for API transmission
+            "bus_telemetry": bus_telemetry,
+            "tripped_buses": tripped_buses,
+            "broken_lines": active_broken_lines,
+            "timeline_progression": timeline_progression,
+            "transportation_impacts": transportation_impacts,
+            "water_impacts": water_impacts[:25],
             "telecom_impacts": telecom_impacts[:50],
             "hospital_impacts": hospital_impacts[:30]
         }
