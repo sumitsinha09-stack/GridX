@@ -48,7 +48,7 @@ function DashboardLayout() {
 
   return (
     <motion.div
-      className="flex flex-col min-h-screen bg-[#07090e] text-gray-200 relative z-20 font-sans"
+      className="flex flex-col h-full max-h-full bg-[#07090e] text-gray-200 relative z-20 font-sans overflow-hidden"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.2 }}
@@ -76,37 +76,8 @@ function DashboardLayout() {
           </Link>
         </div>
 
-        {/* Center: Live Industrial Status */}
-        <div className="hidden xl:flex items-center gap-3 text-xs font-mono">
-          <div className="flex items-center gap-2 bg-[#0e131f] border border-white/10 px-3 py-1 rounded-md">
-            <span className="text-[10px] text-gray-400 uppercase">Freq:</span>
-            <span className="text-cyan-400 font-bold">59.988</span>
-            <span className="text-gray-400 text-[10px]">Hz</span>
-            <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 shadow-[0_0_6px_#00e5ff]" />
-          </div>
-
-          <div className="flex items-center gap-2 bg-[#0e131f] border border-white/10 px-3 py-1 rounded-md">
-            <span className="text-[10px] text-gray-400 uppercase">Load:</span>
-            <span className="text-cyan-400 font-bold">4,820</span>
-            <span className="text-gray-400 text-[10px]">MW</span>
-            <span className="text-emerald-400 text-[10px] font-bold">(+12)</span>
-          </div>
-
-          <div className="flex items-center gap-2 bg-[#0e131f] border border-white/10 px-3 py-1 rounded-md">
-            <span className="text-[10px] text-gray-400 uppercase">N-1 Status:</span>
-            <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-[9px] px-1.5 py-0.5 rounded font-bold uppercase">
-              Nominal
-            </span>
-          </div>
-
-          <div className="flex items-center gap-1.5 bg-[#0e131f] border border-white/10 px-3 py-1 rounded-md text-[11px] text-gray-300">
-            <Radio className="w-3 h-3 text-cyan-400" />
-            <span>IEEE 39-Bus [120ms Latency]</span>
-          </div>
-        </div>
-
-        {/* Right: Multi-Page Navigation Bar */}
-        <div className="flex items-center gap-1">
+        {/* Center: Multi-Page Navigation Bar */}
+        <div className="flex items-center gap-1.5">
           {navLinks.map((link) => {
             const Icon = link.icon;
             const isActive = location.pathname === link.to;
@@ -114,7 +85,7 @@ function DashboardLayout() {
               <Link
                 key={link.to}
                 to={link.to}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                   isActive
                     ? 'bg-cyan-400 text-slate-950 font-bold shadow-[0_0_12px_rgba(0,229,255,0.35)]'
                     : 'text-gray-400 hover:text-white hover:bg-white/5'
@@ -125,15 +96,17 @@ function DashboardLayout() {
               </Link>
             );
           })}
+        </div>
 
-          <div className="w-px h-5 bg-white/10 mx-1.5" />
+        {/* Right: Actions */}
+        <div className="flex items-center gap-2">
           <ThemeToggle />
         </div>
 
       </header>
 
       {/* Main Page Outlet */}
-      <main className="flex-1 flex overflow-hidden">
+      <main className="flex-1 flex min-h-0 overflow-hidden relative">
         <Routes>
           <Route path="topology" element={<TopologyPage />} />
           <Route path="telemetry" element={<SectorTelemetryPage />} />

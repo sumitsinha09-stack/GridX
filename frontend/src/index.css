@@ -5,6 +5,17 @@
 @tailwind utilities;
 
 @layer base {
+  html {
+    zoom: 1.15;
+    height: 100%;
+  }
+
+  body, #root {
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+  }
+
   :root {
     --grid-bg: #07080b;
     --grid-bg-alt: #12141c;

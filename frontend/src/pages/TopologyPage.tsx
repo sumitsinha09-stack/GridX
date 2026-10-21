@@ -77,10 +77,30 @@ export default function TopologyPage() {
     runSimulation();
   }, [multiplier, brokenLines, timeHorizon, enabledLayers]);
 
+  const hasAutoZoomed = useRef(false);
+
+  useEffect(() => {
+    if (graphData.nodes.length > 0 && graphRef.current && !hasAutoZoomed.current) {
+      const timer = setTimeout(() => {
+        if (graphRef.current) {
+          hasAutoZoomed.current = true;
+          graphRef.current.centerAt(-80, -80, 500);
+          graphRef.current.zoom(1.42, 500);
+        }
+      }, 400);
+      return () => clearTimeout(timer);
+    }
+  }, [graphData.nodes.length]);
+
   // Zoom control helpers
   const handleZoomIn = () => graphRef.current?.zoom(graphRef.current.zoom() * 1.3, 400);
   const handleZoomOut = () => graphRef.current?.zoom(graphRef.current.zoom() * 0.7, 400);
-  const handleResetZoom = () => graphRef.current?.zoomToFit(400, 30);
+  const handleResetZoom = () => {
+    if (graphRef.current) {
+      graphRef.current.centerAt(-80, -80, 400);
+      graphRef.current.zoom(1.42, 400);
+    }
+  };
 
   // Node drawing logic matching the clean industrial look
   const paintNode = useCallback((node: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
@@ -91,11 +111,11 @@ export default function TopologyPage() {
 
     if (layer === 'POWER') {
       const isFailed = node.is_failed;
-      const r = isSelected ? 8 : 6;
+      const r = isSelected ? 10 : 7.5;
 
       if (isFailed) {
         ctx.beginPath();
-        ctx.arc(node.x, node.y, r + 5, 0, 2 * Math.PI, false);
+        ctx.arc(node.x, node.y, r + 6, 0, 2 * Math.PI, false);
         ctx.fillStyle = 'rgba(239, 68, 68, 0.25)';
         ctx.fill();
       }
@@ -104,36 +124,36 @@ export default function TopologyPage() {
       ctx.arc(node.x, node.y, r, 0, 2 * Math.PI, false);
       ctx.fillStyle = isFailed ? '#ef4444' : isSelected ? '#00e5ff' : '#0ea5e9';
       ctx.fill();
-      ctx.lineWidth = isSelected ? 2.5 : 1.5;
+      ctx.lineWidth = isSelected ? 3 : 1.8;
       ctx.strokeStyle = '#ffffff';
       ctx.stroke();
 
-      ctx.font = `${10 / globalScale}px "JetBrains Mono", monospace`;
+      ctx.font = `${11 / globalScale}px "JetBrains Mono", monospace`;
       ctx.fillStyle = isFailed ? '#fca5a5' : '#7dd3fc';
       ctx.textAlign = 'center';
-      ctx.fillText(`P${node.bus_id}`, node.x, node.y + r + 11);
+      ctx.fillText(`P${node.bus_id}`, node.x, node.y + r + 12);
 
     } else if (layer === 'WATER') {
       const isPump = node.is_pump;
       const isFailed = node.is_failed;
-      const size = isPump ? 9 : 5;
+      const size = isPump ? 11 : 6.5;
 
       ctx.beginPath();
       ctx.rect(node.x - size / 2, node.y - size / 2, size, size);
       ctx.fillStyle = isFailed ? '#64748b' : '#00e5ff';
       ctx.fill();
-      ctx.lineWidth = 1;
+      ctx.lineWidth = 1.2;
       ctx.strokeStyle = isFailed ? '#ef4444' : '#67e8f9';
       ctx.stroke();
 
-      ctx.font = `${8.5 / globalScale}px "JetBrains Mono", monospace`;
+      ctx.font = `${9.5 / globalScale}px "JetBrains Mono", monospace`;
       ctx.fillStyle = '#00e5ff';
       ctx.textAlign = 'center';
-      ctx.fillText(isPump ? `W-PUMP` : `W${node.id.split('_')[1]}`, node.x, node.y + size + 9);
+      ctx.fillText(isPump ? `W-PUMP` : `W${node.id.split('_')[1]}`, node.x, node.y + size + 10);
 
     } else if (layer === 'TELECOM') {
       const isFailed = node.is_failed;
-      const size = 6;
+      const size = 7.5;
 
       ctx.beginPath();
       ctx.moveTo(node.x, node.y - size);
@@ -143,42 +163,42 @@ export default function TopologyPage() {
       ctx.closePath();
       ctx.fillStyle = isFailed ? '#334155' : '#a855f7';
       ctx.fill();
-      ctx.lineWidth = 1;
+      ctx.lineWidth = 1.2;
       ctx.strokeStyle = isFailed ? '#ef4444' : '#d8b4fe';
       ctx.stroke();
 
-      ctx.font = `${8 / globalScale}px "JetBrains Mono", monospace`;
+      ctx.font = `${9 / globalScale}px "JetBrains Mono", monospace`;
       ctx.fillStyle = '#c084fc';
       ctx.textAlign = 'center';
-      ctx.fillText(`T${node.id.split('_')[1]}`, node.x, node.y + size + 8);
+      ctx.fillText(`T${node.id.split('_')[1]}`, node.x, node.y + size + 9);
 
     } else if (layer === 'HEALTHCARE') {
       const isFailed = node.is_failed;
-      const size = 11;
+      const size = 13;
 
       ctx.beginPath();
       ctx.arc(node.x, node.y, size / 2, 0, 2 * Math.PI, false);
       ctx.fillStyle = isFailed ? '#b91c1c' : node.status === 'ON_EMERGENCY_GENERATOR' ? '#d97706' : '#10b981';
       ctx.fill();
-      ctx.lineWidth = 1.2;
+      ctx.lineWidth = 1.4;
       ctx.strokeStyle = '#ffffff';
       ctx.stroke();
 
       ctx.fillStyle = '#ffffff';
-      ctx.fillRect(node.x - 1, node.y - 3.5, 2, 7);
-      ctx.fillRect(node.x - 3.5, node.y - 1, 7, 2);
+      ctx.fillRect(node.x - 1.2, node.y - 4, 2.4, 8);
+      ctx.fillRect(node.x - 4, node.y - 1.2, 8, 2.4);
 
-      ctx.font = `${8.5 / globalScale}px "JetBrains Mono", monospace`;
+      ctx.font = `${9.5 / globalScale}px "JetBrains Mono", monospace`;
       ctx.fillStyle = isFailed ? '#fca5a5' : '#34d399';
       ctx.textAlign = 'center';
-      ctx.fillText(`${node.icu_beds} ICU`, node.x, node.y + size / 2 + 9);
+      ctx.fillText(`${node.icu_beds} ICU`, node.x, node.y + size / 2 + 10);
     }
 
     ctx.restore();
   }, [selectedNode]);
 
   return (
-    <div className="flex-1 w-full h-[calc(100vh-3.5rem)] relative bg-[#07090e] text-gray-300 font-sans overflow-hidden select-none">
+    <div className="flex-1 w-full h-full relative bg-[#07090e] text-gray-300 font-sans overflow-hidden select-none">
 
       {/* Background Radar Rings */}
       <div className="absolute inset-0 pointer-events-none flex items-center justify-center opacity-25">
@@ -193,7 +213,7 @@ export default function TopologyPage() {
       {/* ========================================================================= */}
       {/* FLOATING TOP BAR: Layer Toggles, Horizon Slider, and Quick Stats          */}
       {/* ========================================================================= */}
-      <div className="absolute top-4 left-6 right-6 z-30 flex flex-wrap items-center justify-between gap-3 pointer-events-none">
+      <div className="absolute top-3 left-5 right-5 z-30 flex items-center justify-between gap-2 pointer-events-none">
         
         {/* Left: Compact Layer Filter Chips */}
         <div className="flex items-center gap-1.5 bg-[#0b0e17]/90 backdrop-blur-md border border-white/10 px-3 py-1.5 rounded-xl pointer-events-auto shadow-2xl">
@@ -280,7 +300,7 @@ export default function TopologyPage() {
               if (link.risk > 0.65) return '#eab308';
               return '#0284c7';
             }}
-            linkWidth={(link: any) => link.is_broken ? 1.5 : link.risk > 0.85 ? 3 : 1.5}
+            linkWidth={(link: any) => link.is_broken ? 2 : link.risk > 0.85 ? 3.5 : 2}
             linkLineDash={(link: any) => link.layer === 'INTER_DEPENDENCY' ? [3, 3] : link.is_broken ? [4, 4] : []}
             backgroundColor="transparent"
           />
@@ -305,7 +325,7 @@ export default function TopologyPage() {
       </div>
 
       {/* Floating Bottom Quick Outage Control Bar */}
-      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 bg-[#0b0e17]/95 backdrop-blur-md border border-white/10 rounded-2xl px-5 py-2.5 shadow-2xl flex items-center gap-4">
+      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 bg-[#0b0e17]/95 backdrop-blur-md border border-white/10 rounded-2xl px-5 py-2 shadow-2xl flex items-center gap-4">
         
         <div className="flex items-center gap-2 pr-2 border-r border-white/10">
           <AlertTriangle className="w-4 h-4 text-red-400" />
