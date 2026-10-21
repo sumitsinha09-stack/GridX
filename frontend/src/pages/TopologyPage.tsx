@@ -1,19 +1,32 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import ForceGraph2D from 'react-force-graph-2d';
 import axios from 'axios';
 import { 
-  Zap, AlertTriangle, X, Droplets, Radio, Hospital, Clock, 
-  Layers, Plus, Minus, Crosshair, ChevronRight, ArrowUpRight,
-  Car, RefreshCw, ShieldAlert, Activity, ExternalLink
+  Zap, 
+  Droplets, 
+  Radio, 
+  Hospital, 
+  Car,
+  AlertTriangle, 
+  Clock, 
+  RefreshCw, 
+  X, 
+  ExternalLink,
+  Layers,
+  ArrowUpRight,
+  ChevronRight,
+  Plus,
+  Minus,
+  Crosshair,
+  Activity,
+  ShieldAlert
 } from 'lucide-react';
-import ForceGraph2D from 'react-force-graph-2d';
+import { Link } from 'react-router-dom';
 
 interface SummaryMetrics {
   time_horizon_hours: number;
   power_buses_offline: number;
   power_lines_tripped: number;
-  substations_tripped?: number;
-  secondary_lines_at_risk?: number;
   water_pumps_tripped: number;
   estimated_water_loss_gpm: number;
   traffic_signals_offline?: number;
@@ -41,8 +54,15 @@ export default function TopologyPage() {
   const multiplier = 1.35;
   const [brokenLines, setBrokenLines] = useState<number[]>([12, 15]);
   const [trippedBuses, setTrippedBuses] = useState<number[]>([]);
+  
+  // Inspector selection states - supports ANY node, line, sector, or special control button
   const [selectedNode, setSelectedNode] = useState<any | null>(null);
   const [selectedLink, setSelectedLink] = useState<any | null>(null);
+  const [selectedSector, setSelectedSector] = useState<string | null>(null);
+  const [selectedSpecialView, setSelectedSpecialView] = useState<
+    'OUTAGE_CONTROL' | 'HORIZON_TIMELINE' | 'OFFLINE_BUSES' | 'PUMPS' | 'SIGNALS' | 'ICU' | null
+  >(null);
+
   const [activeInspectorTab, setActiveInspectorTab] = useState<'TELEMETRY' | 'IMPACT' | 'TIMELINE'>('TELEMETRY');
   
   // Multi-infrastructure expansion states
@@ -72,10 +92,49 @@ export default function TopologyPage() {
 
   const graphRef = useRef<any>(null);
 
+  // Unified Drawer View Closers & Openers
+  const closeDrawer = () => {
+    setSelectedNode(null);
+    setSelectedLink(null);
+    setSelectedSector(null);
+    setSelectedSpecialView(null);
+  };
+
+  const openNodeDetails = (node: any) => {
+    setSelectedNode(node);
+    setSelectedLink(null);
+    setSelectedSector(null);
+    setSelectedSpecialView(null);
+    setActiveInspectorTab('TELEMETRY');
+  };
+
+  const openLinkDetails = (link: any) => {
+    setSelectedLink(link);
+    setSelectedNode(null);
+    setSelectedSector(null);
+    setSelectedSpecialView(null);
+  };
+
+  const openSectorDetails = (sector: string) => {
+    setSelectedSector(sector);
+    setSelectedNode(null);
+    setSelectedLink(null);
+    setSelectedSpecialView(null);
+  };
+
+  const openSpecialView = (view: 'OUTAGE_CONTROL' | 'HORIZON_TIMELINE' | 'OFFLINE_BUSES' | 'PUMPS' | 'SIGNALS' | 'ICU') => {
+    setSelectedSpecialView(view);
+    setSelectedNode(null);
+    setSelectedLink(null);
+    setSelectedSector(null);
+  };
+
   const toggleLayer = (layer: string) => {
     setEnabledLayers(prev => 
       prev.includes(layer) ? prev.filter(l => l !== layer) : [...prev, layer]
     );
+    // Also display the details for this sector
+    openSectorDetails(layer);
   };
 
   const runSimulation = async () => {
@@ -107,7 +166,10 @@ export default function TopologyPage() {
 
       // Refresh currently selected link if active
       if (selectedLink && res.data.graph_data?.links) {
-        const updatedL = res.data.graph_data.links.find((l: any) => l.line_id === selectedLink.line_id);
+        const updatedL = res.data.graph_data.links.find((l: any) => 
+          (selectedLink.line_id !== undefined && l.line_id === selectedLink.line_id) ||
+          (l.source === selectedLink.source && l.target === selectedLink.target)
+        );
         if (updatedL) setSelectedLink(updatedL);
       }
     } catch (err) {
@@ -170,9 +232,7 @@ export default function TopologyPage() {
       layer: 'POWER',
       bus_id: busId
     };
-    setSelectedNode(nodeObj);
-    setSelectedLink(null);
-    setActiveInspectorTab('TELEMETRY');
+    openNodeDetails(nodeObj);
   };
 
   // Select line helper
@@ -186,14 +246,14 @@ export default function TopologyPage() {
       risk: 0.85,
       is_broken: brokenLines.includes(lineId)
     };
-    setSelectedLink(linkObj);
-    setSelectedNode(null);
+    openLinkDetails(linkObj);
   };
 
   // Reset all outages
   const handleResetAllOutages = () => {
     setBrokenLines([]);
     setTrippedBuses([]);
+    openSpecialView('OUTAGE_CONTROL');
   };
 
   // Node drawing logic matching the clean industrial look
@@ -209,7 +269,6 @@ export default function TopologyPage() {
       const r = isSelected ? 11 : 8;
 
       if (isTripped) {
-        // Red flashing hazard ring for directly tripped substations
         ctx.beginPath();
         ctx.arc(node.x, node.y, r + 8, 0, 2 * Math.PI, false);
         ctx.fillStyle = 'rgba(239, 68, 68, 0.4)';
@@ -220,7 +279,6 @@ export default function TopologyPage() {
         ctx.stroke();
         ctx.setLineDash([]);
       } else if (isFailed) {
-        // Secondary overloaded or cascade-failed substation
         ctx.beginPath();
         ctx.arc(node.x, node.y, r + 6, 0, 2 * Math.PI, false);
         ctx.fillStyle = 'rgba(249, 115, 22, 0.3)';
@@ -248,20 +306,21 @@ export default function TopologyPage() {
 
       ctx.beginPath();
       ctx.rect(node.x - size / 2, node.y - size / 2, size, size);
-      ctx.fillStyle = isFailed ? '#64748b' : isSelected ? '#38bdf8' : '#00e5ff';
+      ctx.fillStyle = isFailed ? '#b91c1c' : isPump ? (isSelected ? '#67e8f9' : '#06b6d4') : (isSelected ? '#a5f3fc' : '#22d3ee');
       ctx.fill();
       ctx.lineWidth = isSelected ? 2.5 : 1.2;
-      ctx.strokeStyle = isFailed ? '#ef4444' : '#ffffff';
+      ctx.strokeStyle = isFailed ? '#fca5a5' : '#ffffff';
       ctx.stroke();
 
-      ctx.font = `${9.5 / globalScale}px "JetBrains Mono", monospace`;
-      ctx.fillStyle = isFailed ? '#94a3b8' : '#00e5ff';
+      ctx.font = `${8.5 / globalScale}px "JetBrains Mono", monospace`;
+      ctx.fillStyle = isFailed ? '#fca5a5' : '#67e8f9';
       ctx.textAlign = 'center';
-      ctx.fillText(isPump ? `W-PUMP` : `W${node.id.split('_')[1]}`, node.x, node.y + size + 10);
+      const label = isPump ? `W-PUMP` : `W${node.water_node_id || ''}`;
+      ctx.fillText(label, node.x, node.y + size / 2 + 9);
 
     } else if (layer === 'TELECOM') {
       const isFailed = node.is_failed;
-      const size = 7.5;
+      const size = 9;
 
       ctx.beginPath();
       ctx.moveTo(node.x, node.y - size);
@@ -269,24 +328,24 @@ export default function TopologyPage() {
       ctx.lineTo(node.x, node.y + size);
       ctx.lineTo(node.x - size, node.y);
       ctx.closePath();
-      ctx.fillStyle = isFailed ? '#334155' : isSelected ? '#c084fc' : '#a855f7';
+      ctx.fillStyle = isFailed ? '#4c1d95' : isSelected ? '#e9d5ff' : '#a855f7';
       ctx.fill();
       ctx.lineWidth = isSelected ? 2.5 : 1.2;
       ctx.strokeStyle = isFailed ? '#ef4444' : '#ffffff';
       ctx.stroke();
 
-      ctx.font = `${9 / globalScale}px "JetBrains Mono", monospace`;
-      ctx.fillStyle = '#c084fc';
+      ctx.font = `${8.5 / globalScale}px "JetBrains Mono", monospace`;
+      ctx.fillStyle = isFailed ? '#fca5a5' : '#c084fc';
       ctx.textAlign = 'center';
-      ctx.fillText(`T${node.id.split('_')[1]}`, node.x, node.y + size + 9);
+      ctx.fillText(`T${node.tower_id || ''}`, node.x, node.y + size + 8);
 
     } else if (layer === 'HEALTHCARE') {
       const isFailed = node.is_failed;
-      const size = 13;
+      const size = 11;
 
       ctx.beginPath();
-      ctx.arc(node.x, node.y, size / 2, 0, 2 * Math.PI, false);
-      ctx.fillStyle = isFailed ? '#b91c1c' : node.status === 'ON_EMERGENCY_GENERATOR' ? '#d97706' : '#10b981';
+      ctx.arc(node.x, node.y, size, 0, 2 * Math.PI);
+      ctx.fillStyle = isFailed ? '#991b1b' : isSelected ? '#86efac' : '#10b981';
       ctx.fill();
       ctx.lineWidth = isSelected ? 3 : 1.4;
       ctx.strokeStyle = '#ffffff';
@@ -299,7 +358,7 @@ export default function TopologyPage() {
       ctx.font = `${9.5 / globalScale}px "JetBrains Mono", monospace`;
       ctx.fillStyle = isFailed ? '#fca5a5' : '#34d399';
       ctx.textAlign = 'center';
-      ctx.fillText(`${node.icu_beds} ICU`, node.x, node.y + size / 2 + 10);
+      ctx.fillText(`${node.icu_beds || 0} ICU`, node.x, node.y + size / 2 + 10);
 
     } else if (layer === 'TRANSPORTATION') {
       const isFailed = node.is_failed;
@@ -360,6 +419,8 @@ export default function TopologyPage() {
     return 0;
   };
 
+  const isAnyDrawerOpen = Boolean(selectedNode || selectedLink || selectedSector || selectedSpecialView);
+
   return (
     <div className="flex-1 w-full h-full relative bg-[#07090e] text-gray-300 font-sans overflow-hidden select-none">
 
@@ -378,7 +439,7 @@ export default function TopologyPage() {
       {/* ========================================================================= */}
       <div className="absolute top-3 left-5 right-5 z-30 flex items-center justify-between gap-2 pointer-events-none">
         
-        {/* Left: Compact Layer Filter Chips */}
+        {/* Left: Compact Layer Filter Chips (Clicking toggles layer AND displays sector details) */}
         <div className="flex items-center gap-1.5 bg-[#0b0e17]/90 backdrop-blur-md border border-white/10 px-3 py-1.5 rounded-xl pointer-events-auto shadow-2xl">
           <Layers className="w-3.5 h-3.5 text-cyan-400 mr-1" />
           {[
@@ -390,16 +451,19 @@ export default function TopologyPage() {
           ].map(layer => {
             const Icon = layer.icon;
             const isChecked = enabledLayers.includes(layer.id);
+            const isCurrentlySelected = selectedSector === layer.id;
             return (
               <button
                 key={layer.id}
                 onClick={() => toggleLayer(layer.id)}
                 className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all border cursor-pointer ${
-                  isChecked
-                    ? 'bg-white/10 border-white/20 text-white shadow-sm'
+                  isCurrentlySelected
+                    ? 'ring-2 ring-cyan-400 bg-white/20 border-white text-white shadow-md'
+                    : isChecked
+                    ? 'bg-white/10 border-white/20 text-white shadow-sm hover:bg-white/15'
                     : 'bg-transparent border-transparent text-gray-500 hover:text-gray-300'
                 }`}
-                title={`Toggle ${layer.label} visibility`}
+                title={`Toggle and view ${layer.label} infrastructure details`}
               >
                 <Icon className={`w-3 h-3 ${isChecked ? layer.color : 'text-gray-500'}`} />
                 <span>{layer.label}</span>
@@ -408,7 +472,7 @@ export default function TopologyPage() {
           })}
         </div>
 
-        {/* Center: Cascade Horizon Stepper */}
+        {/* Center: Cascade Horizon Stepper (Clicking sets horizon AND displays timeline details) */}
         <div className="flex items-center gap-2 bg-[#0b0e17]/90 backdrop-blur-md border border-white/10 px-4 py-1.5 rounded-xl pointer-events-auto shadow-2xl">
           <Clock className="w-3.5 h-3.5 text-amber-400 mr-1" />
           <span className="text-xs text-gray-400 font-mono">Horizon:</span>
@@ -416,12 +480,16 @@ export default function TopologyPage() {
             {[0, 4, 12, 24, 72].map(h => (
               <button
                 key={h}
-                onClick={() => setTimeHorizon(h)}
+                onClick={() => {
+                  setTimeHorizon(h);
+                  openSpecialView('HORIZON_TIMELINE');
+                }}
                 className={`px-2 py-0.5 rounded font-bold transition-all cursor-pointer ${
                   timeHorizon === h 
                     ? 'bg-amber-400 text-slate-950 shadow-[0_0_8px_rgba(251,191,36,0.4)]' 
-                    : 'bg-white/5 text-gray-400 hover:text-white'
+                    : 'bg-white/5 text-gray-400 hover:text-white hover:bg-white/10'
                 }`}
+                title={`Inspect cascading failure at t = ${h} hours`}
               >
                 {h}h
               </button>
@@ -429,56 +497,47 @@ export default function TopologyPage() {
           </div>
         </div>
 
-        {/* Right: Telemetry Quick Interactive Pills */}
+        {/* Right: Telemetry Quick Interactive Pills (Every pill opens corresponding details) */}
         <div className="flex items-center gap-2 bg-[#0b0e17]/90 backdrop-blur-md border border-white/10 px-3 py-1.5 rounded-xl pointer-events-auto shadow-2xl font-mono text-xs">
           <div className="flex items-center gap-2.5">
             {trippedBuses.length > 0 && (
               <button
-                onClick={() => handleSelectSubstation(trippedBuses[0])}
-                className="flex items-center gap-1 text-red-400 font-bold bg-red-950/70 hover:bg-red-900/80 px-2 py-0.5 rounded border border-red-500/50 animate-pulse cursor-pointer"
-                title="Inspect First Tripped Substation"
+                onClick={() => openSpecialView('OUTAGE_CONTROL')}
+                className="flex items-center gap-1 text-red-400 font-bold bg-red-950/70 hover:bg-red-900/80 px-2 py-0.5 rounded border border-red-500/50 animate-pulse cursor-pointer transition-colors"
+                title="Inspect all actively tripped substations"
               >
                 <Zap className="w-3 h-3" />
                 {trippedBuses.length} Tripped
               </button>
             )}
             <button
-              onClick={() => handleSelectSubstation(18)}
-              className="hover:text-white transition-colors cursor-pointer text-gray-400"
-              title="Click to inspect substation"
+              onClick={() => openSpecialView('OFFLINE_BUSES')}
+              className="hover:text-white transition-colors cursor-pointer text-gray-400 hover:bg-white/5 px-1.5 py-0.5 rounded"
+              title="Click to view power grid substation network summary"
             >
               Buses: <strong className="text-red-400">{summary.power_buses_offline}</strong>/39
             </button>
             <span className="text-gray-500">|</span>
             <button
-              onClick={() => {
-                const pumpNode = graphData.nodes.find(n => n.is_pump);
-                if (pumpNode) { setSelectedNode(pumpNode); setSelectedLink(null); }
-              }}
-              className="hover:text-white transition-colors cursor-pointer text-gray-400"
-              title="Click to inspect water booster pumps"
+              onClick={() => openSpecialView('PUMPS')}
+              className="hover:text-white transition-colors cursor-pointer text-gray-400 hover:bg-white/5 px-1.5 py-0.5 rounded"
+              title="Click to view municipal water booster pump details"
             >
               Pumps: <strong className="text-cyan-400">{summary.water_pumps_tripped}</strong>
             </button>
             <span className="text-gray-500">|</span>
             <button
-              onClick={() => {
-                const trNode = graphData.nodes.find(n => n.layer === 'TRANSPORTATION');
-                if (trNode) { setSelectedNode(trNode); setSelectedLink(null); }
-              }}
-              className="hover:text-white transition-colors cursor-pointer text-gray-400"
-              title="Click to inspect traffic signals"
+              onClick={() => openSpecialView('SIGNALS')}
+              className="hover:text-white transition-colors cursor-pointer text-gray-400 hover:bg-white/5 px-1.5 py-0.5 rounded"
+              title="Click to view traffic signal controller impact details"
             >
               Signals: <strong className="text-amber-400">{summary.traffic_signals_offline || 0}</strong>
             </button>
             <span className="text-gray-500">|</span>
             <button
-              onClick={() => {
-                const hospNode = graphData.nodes.find(n => n.layer === 'HEALTHCARE');
-                if (hospNode) { setSelectedNode(hospNode); setSelectedLink(null); }
-              }}
-              className="hover:text-white transition-colors cursor-pointer text-gray-400"
-              title="Click to inspect hospitals"
+              onClick={() => openSpecialView('ICU')}
+              className="hover:text-white transition-colors cursor-pointer text-gray-400 hover:bg-white/5 px-1.5 py-0.5 rounded"
+              title="Click to view hospital ICU bed & emergency generator status"
             >
               ICU: <strong className={summary.icu_beds_at_risk > 0 ? 'text-red-400' : 'text-emerald-400'}>{summary.icu_beds_at_risk}</strong>
             </button>
@@ -529,8 +588,8 @@ export default function TopologyPage() {
             nodeCanvasObject={paintNode}
             nodePointerAreaPaint={(node: any, color: string, ctx: CanvasRenderingContext2D) => {
               ctx.beginPath();
-              // Generous 20px pointer area ensures every node is easily clickable
-              ctx.arc(node.x, node.y, 20, 0, 2 * Math.PI, false);
+              // Generous 22px pointer area ensures every node is easily clickable
+              ctx.arc(node.x, node.y, 22, 0, 2 * Math.PI, false);
               ctx.fillStyle = color;
               ctx.fill();
             }}
@@ -539,33 +598,36 @@ export default function TopologyPage() {
                 ctx.beginPath();
                 ctx.moveTo(link.source.x, link.source.y);
                 ctx.lineTo(link.target.x, link.target.y);
-                ctx.lineWidth = 14;
+                ctx.lineWidth = 16;
                 ctx.strokeStyle = color;
                 ctx.stroke();
               }
             }}
             onNodeClick={(node) => {
-              setSelectedNode(node);
-              setSelectedLink(null);
-              setActiveInspectorTab('TELEMETRY');
+              openNodeDetails(node);
             }}
             onLinkClick={(link) => {
-              setSelectedLink(link);
-              setSelectedNode(null);
+              openLinkDetails(link);
             }}
             linkColor={(link: any) => {
-              const isSelected = selectedLink && selectedLink.line_id === link.line_id;
+              const isSelected = selectedLink && (
+                (selectedLink.line_id !== undefined && selectedLink.line_id === link.line_id) ||
+                (selectedLink.source === link.source && selectedLink.target === link.target)
+              );
               if (isSelected) return '#ffffff';
               if (link.is_broken) return 'rgba(239, 68, 68, 0.85)';
               if (link.is_severed_by_bus) return 'rgba(239, 68, 68, 0.95)';
-              if (link.layer === 'INTER_DEPENDENCY') return 'rgba(168, 85, 247, 0.3)';
+              if (link.layer === 'INTER_DEPENDENCY') return 'rgba(168, 85, 247, 0.35)';
               if (link.risk > 0.85) return '#ef4444';
               if (link.risk > 0.65) return '#f59e0b';
               return '#0284c7';
             }}
             linkWidth={(link: any) => {
-              const isSelected = selectedLink && selectedLink.line_id === link.line_id;
-              if (isSelected) return 4;
+              const isSelected = selectedLink && (
+                (selectedLink.line_id !== undefined && selectedLink.line_id === link.line_id) ||
+                (selectedLink.source === link.source && selectedLink.target === link.target)
+              );
+              if (isSelected) return 4.5;
               return (link.is_broken || link.is_severed_by_bus) ? 2.5 : link.risk > 0.85 ? 3.5 : 2;
             }}
             linkLineDash={(link: any) => link.layer === 'INTER_DEPENDENCY' ? [3, 3] : (link.is_broken || link.is_severed_by_bus) ? [4, 4] : []}
@@ -581,13 +643,18 @@ export default function TopologyPage() {
       {/* Floating Bottom Quick Outage Control Bar */}
       <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 bg-[#0b0e17]/95 backdrop-blur-md border border-white/10 rounded-2xl px-5 py-2 shadow-2xl flex items-center gap-4">
         
-        <div className="flex items-center gap-2 pr-2 border-r border-white/10">
+        {/* Clickable Outage Control Badge (Opens Contingency Details) */}
+        <button
+          onClick={() => openSpecialView('OUTAGE_CONTROL')}
+          className="flex items-center gap-2 pr-2 border-r border-white/10 hover:opacity-80 transition-opacity cursor-pointer"
+          title="Click to view active outages & grid contingency summary"
+        >
           <AlertTriangle className="w-4 h-4 text-red-400" />
           <span className="text-xs font-bold text-white uppercase tracking-wider">Outage Control</span>
           <span className="bg-red-500/20 text-red-400 border border-red-500/40 text-[10px] font-mono font-bold px-1.5 py-0.5 rounded">
             {brokenLines.length + trippedBuses.length} Active
           </span>
-        </div>
+        </button>
 
         {/* Quick Line Outage Chips (Clicking opens line details in inspector drawer) */}
         <div className="flex items-center gap-1.5">
@@ -604,7 +671,7 @@ export default function TopologyPage() {
                     ? 'ring-2 ring-cyan-400 bg-cyan-950/60 text-cyan-200 border-cyan-400'
                     : isTripped
                     ? 'bg-red-950/70 border-red-500/70 text-red-300 shadow-[0_0_8px_rgba(239,68,68,0.3)]'
-                    : 'bg-[#121724] border-white/10 text-gray-400 hover:text-white'
+                    : 'bg-[#121724] border-white/10 text-gray-400 hover:text-white hover:bg-white/5'
                 }`}
                 title={`Inspect Transmission Line ${lineId}`}
               >
@@ -629,7 +696,7 @@ export default function TopologyPage() {
                     ? 'ring-2 ring-cyan-400 bg-cyan-950/60 text-cyan-200 border-cyan-400'
                     : isTripped
                     ? 'bg-red-950/80 border-red-500 text-red-300 shadow-[0_0_8px_rgba(239,68,68,0.4)] animate-pulse'
-                    : 'bg-[#121724] border-white/10 text-cyan-400 hover:text-white'
+                    : 'bg-[#121724] border-white/10 text-cyan-400 hover:text-white hover:bg-white/5'
                 }`}
                 title={`Inspect Substation P${busId}`}
               >
@@ -661,26 +728,38 @@ export default function TopologyPage() {
       </div>
 
       {/* ========================================================================= */}
-      {/* EXPANDED INTERACTIVE SIDE PANEL: Node & Link Inspection, Failure Cascade */}
+      {/* EXPANDED INTERACTIVE SIDE DRAWER: PINNED HEADER, BODY & PINNED FOOTER     */}
       {/* ========================================================================= */}
-      {(selectedNode || selectedLink) && (
-        <div className="absolute top-16 right-6 w-[410px] max-h-[calc(100vh-140px)] z-40 bg-[#0b0e17]/95 backdrop-blur-xl border border-white/15 rounded-2xl p-4 shadow-2xl flex flex-col gap-3.5 overflow-hidden animate-in fade-in slide-in-from-right-4 duration-200">
+      {isAnyDrawerOpen && (
+        <div className="absolute top-14 bottom-6 right-6 w-[420px] z-40 bg-[#0b0e17]/95 backdrop-blur-xl border border-white/15 rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in slide-in-from-right-4 duration-200">
           
-          {/* Header */}
-          <div className="flex items-center justify-between border-b border-white/10 pb-3">
+          {/* ===================== PINNED HEADER ===================== */}
+          <div className="flex items-center justify-between p-3.5 border-b border-white/10 shrink-0">
             <div className="flex items-center gap-2.5">
-              <span className={`w-3 h-3 rounded-full ${
+              <span className={`w-3 h-3 rounded-full shrink-0 ${
+                selectedSpecialView === 'OUTAGE_CONTROL' ? 'bg-red-500 animate-ping' :
                 selectedLink ? (brokenLines.includes(selectedLink.line_id) ? 'bg-red-500 animate-ping' : 'bg-blue-400') :
                 isSelectedBusTripped ? 'bg-red-500 animate-ping' :
-                selectedNode.layer === 'POWER' ? 'bg-blue-400' :
-                selectedNode.layer === 'WATER' ? 'bg-cyan-400' :
-                selectedNode.layer === 'TRANSPORTATION' ? 'bg-amber-400' :
-                selectedNode.layer === 'TELECOM' ? 'bg-purple-400' : 'bg-emerald-400'
+                selectedNode?.layer === 'POWER' ? 'bg-blue-400' :
+                selectedNode?.layer === 'WATER' || selectedSector === 'WATER' || selectedSpecialView === 'PUMPS' ? 'bg-cyan-400' :
+                selectedNode?.layer === 'TRANSPORTATION' || selectedSector === 'TRANSPORTATION' || selectedSpecialView === 'SIGNALS' ? 'bg-amber-400' :
+                selectedNode?.layer === 'TELECOM' || selectedSector === 'TELECOM' ? 'bg-purple-400' :
+                selectedNode?.layer === 'HEALTHCARE' || selectedSector === 'HEALTHCARE' || selectedSpecialView === 'ICU' ? 'bg-emerald-400' :
+                'bg-cyan-400'
               }`} />
               <div>
                 <h4 className="font-bold text-white text-sm uppercase tracking-wide flex items-center gap-2">
-                  {selectedLink ? `TRANSMISSION LINE #${selectedLink.line_id}` : selectedNode.name}
-                  {selectedLink && brokenLines.includes(selectedLink.line_id) && (
+                  {selectedNode ? selectedNode.name :
+                   selectedLink ? (selectedLink.line_id !== undefined ? `TRANSMISSION LINE #${selectedLink.line_id}` : 'CROSS-SECTOR POWER FEED') :
+                   selectedSector ? `${selectedSector} INFRASTRUCTURE` :
+                   selectedSpecialView === 'OUTAGE_CONTROL' ? 'OUTAGE & CONTINGENCY CONTROL' :
+                   selectedSpecialView === 'HORIZON_TIMELINE' ? `CASCADE HORIZON: ${timeHorizon}h` :
+                   selectedSpecialView === 'OFFLINE_BUSES' ? 'POWER SUBSTATIONS OVERVIEW' :
+                   selectedSpecialView === 'PUMPS' ? 'WATER BOOSTER PUMPING NETWORK' :
+                   selectedSpecialView === 'SIGNALS' ? 'TRAFFIC & SIGNAL CONTROL NETWORK' :
+                   'HEALTHCARE & ICU EMERGENCY ASSETS'}
+                  
+                  {selectedLink && selectedLink.line_id !== undefined && brokenLines.includes(selectedLink.line_id) && (
                     <span className="text-[10px] font-mono bg-red-600/30 text-red-400 border border-red-500/50 px-1.5 py-0.2 rounded font-black">
                       SEVERED
                     </span>
@@ -692,12 +771,15 @@ export default function TopologyPage() {
                   )}
                 </h4>
                 <span className="text-[11px] text-gray-400 font-mono">
-                  {selectedLink ? 'Layer: POWER TRANSMISSION CORRIDOR' : `Layer: ${selectedNode.layer}`}
+                  {selectedNode ? `Layer: ${selectedNode.layer}` :
+                   selectedLink ? (selectedLink.line_id !== undefined ? 'Layer: POWER TRANSMISSION CORRIDOR' : 'Layer: INTER-DEPENDENCY FEEDER') :
+                   selectedSector ? 'Layer: CROSS-SECTOR OVERVIEW' :
+                   'GridX Critical Infrastructure Telemetry'}
                 </span>
               </div>
             </div>
             <button 
-              onClick={() => { setSelectedNode(null); setSelectedLink(null); }} 
+              onClick={closeDrawer} 
               className="text-gray-400 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
               title="Close Panel"
             >
@@ -705,9 +787,9 @@ export default function TopologyPage() {
             </button>
           </div>
 
-          {/* Tab Selector for Power Node or Line */}
-          {(selectedNode?.layer === 'POWER' || selectedLink) && (
-            <div className="grid grid-cols-3 gap-1 bg-black/40 p-1 rounded-xl border border-white/5 text-xs font-semibold">
+          {/* ===================== PINNED TABS (For Power Substation) ===================== */}
+          {selectedNode?.layer === 'POWER' && (
+            <div className="grid grid-cols-3 gap-1 bg-black/40 p-1 mx-4 mt-2 rounded-xl border border-white/5 text-xs font-semibold shrink-0">
               <button
                 onClick={() => setActiveInspectorTab('TELEMETRY')}
                 className={`py-1.5 rounded-lg transition-all cursor-pointer ${
@@ -741,86 +823,97 @@ export default function TopologyPage() {
             </div>
           )}
 
-          {/* Scrollable Body Content */}
-          <div className="overflow-y-auto pr-1 flex flex-col gap-3 max-h-[calc(100vh-270px)] custom-scrollbar">
+          {/* ===================== SCROLLABLE BODY CONTENT (min-h-0 is essential!) ===================== */}
+          <div className="overflow-y-auto px-4 py-3 flex-1 min-h-0 flex flex-col gap-3 custom-scrollbar">
 
-            {/* A. TRANSMISSION LINE INSPECTION */}
+            {/* 1. TRANSMISSION LINE OR INTER-DEPENDENCY LINK INSPECTION */}
             {selectedLink && (
               <div className="flex flex-col gap-3 font-mono text-xs">
                 
-                {/* Line Status Card */}
-                <div className="bg-[#121724] border border-white/10 rounded-xl p-3 flex flex-col gap-2.5">
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-400">Circuit ID:</span>
-                    <span className="text-white font-bold">Line #{selectedLink.line_id}</span>
+                {selectedLink.line_id !== undefined ? (
+                  // Power Transmission Line
+                  <div className="bg-[#121724] border border-white/10 rounded-xl p-3 flex flex-col gap-2.5">
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-400">Circuit ID:</span>
+                      <span className="text-white font-bold">Line #{selectedLink.line_id}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-400">Terminal Substation From:</span>
+                      <button
+                        onClick={() => handleSelectSubstation(getBusIdFromRef(selectedLink.source))}
+                        className="text-cyan-400 font-bold hover:underline flex items-center gap-1 cursor-pointer"
+                      >
+                        <span>Substation P{getBusIdFromRef(selectedLink.source)}</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </button>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-400">Terminal Substation To:</span>
+                      <button
+                        onClick={() => handleSelectSubstation(getBusIdFromRef(selectedLink.target))}
+                        className="text-cyan-400 font-bold hover:underline flex items-center gap-1 cursor-pointer"
+                      >
+                        <span>Substation P{getBusIdFromRef(selectedLink.target)}</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </button>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-400">GATv2 Thermal Overload Risk:</span>
+                      <span className={`font-bold ${
+                        (selectedLink.risk || 0) > 0.85 ? 'text-red-400' :
+                        (selectedLink.risk || 0) > 0.65 ? 'text-amber-400' : 'text-emerald-400'
+                      }`}>
+                        {((selectedLink.risk || 0.12) * 100).toFixed(1)}%
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-400">Operating Status:</span>
+                      <span className={`font-bold ${
+                        brokenLines.includes(selectedLink.line_id) ? 'text-red-400' : 'text-emerald-400'
+                      }`}>
+                        {brokenLines.includes(selectedLink.line_id) ? 'TRIPPED / DISCONNECTED' : 'ENERGIZED / NOMINAL'}
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-400">Terminal Substation From:</span>
-                    <button
-                      onClick={() => handleSelectSubstation(getBusIdFromRef(selectedLink.source))}
-                      className="text-cyan-400 font-bold hover:underline flex items-center gap-1 cursor-pointer"
-                    >
-                      <span>Substation P{getBusIdFromRef(selectedLink.source)}</span>
-                      <ExternalLink className="w-3 h-3" />
-                    </button>
+                ) : (
+                  // Inter-dependency Cross-Sector Power Feeder
+                  <div className="bg-[#121724] border border-white/10 rounded-xl p-3 flex flex-col gap-2.5">
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-400">Feeder Relation:</span>
+                      <span className="text-purple-300 font-bold">{selectedLink.relation || 'Cross-Infrastructure Feed'}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-400">Originating Substation:</span>
+                      <button
+                        onClick={() => handleSelectSubstation(getBusIdFromRef(selectedLink.source))}
+                        className="text-cyan-400 font-bold hover:underline flex items-center gap-1 cursor-pointer"
+                      >
+                        <span>Substation P{getBusIdFromRef(selectedLink.source)}</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </button>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-400">Destination Facility:</span>
+                      <span className="text-white font-bold">{selectedLink.target?.name || selectedLink.target?.id || String(selectedLink.target)}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-400">Feeder Status:</span>
+                      <span className={`font-bold ${
+                        selectedLink.is_broken ? 'text-red-400' : 'text-emerald-400'
+                      }`}>
+                        {selectedLink.is_broken ? 'DE-ENERGIZED (OUTAGE)' : 'ENERGIZED (ONLINE)'}
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-400">Terminal Substation To:</span>
-                    <button
-                      onClick={() => handleSelectSubstation(getBusIdFromRef(selectedLink.target))}
-                      className="text-cyan-400 font-bold hover:underline flex items-center gap-1 cursor-pointer"
-                    >
-                      <span>Substation P{getBusIdFromRef(selectedLink.target)}</span>
-                      <ExternalLink className="w-3 h-3" />
-                    </button>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-400">GATv2 Thermal Overload Risk:</span>
-                    <span className={`font-bold ${
-                      (selectedLink.risk || 0) > 0.85 ? 'text-red-400' :
-                      (selectedLink.risk || 0) > 0.65 ? 'text-amber-400' : 'text-emerald-400'
-                    }`}>
-                      {((selectedLink.risk || 0.12) * 100).toFixed(1)}%
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-400">Operating Status:</span>
-                    <span className={`font-bold ${
-                      brokenLines.includes(selectedLink.line_id) ? 'text-red-400' : 'text-emerald-400'
-                    }`}>
-                      {brokenLines.includes(selectedLink.line_id) ? 'TRIPPED / DISCONNECTED' : 'ENERGIZED / NOMINAL'}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Direct Action Button to Trip or Restore Line */}
-                <div className="pt-1 flex flex-col gap-2">
-                  {brokenLines.includes(selectedLink.line_id) ? (
-                    <button
-                      onClick={() => handleToggleLine(selectedLink.line_id)}
-                      className="w-full py-2.5 px-4 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-[0_0_15px_rgba(16,185,129,0.4)] transition-all flex items-center justify-center gap-2 cursor-pointer"
-                    >
-                      <RefreshCw className="w-4 h-4" />
-                      <span>Restore Transmission Line #{selectedLink.line_id}</span>
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => handleToggleLine(selectedLink.line_id)}
-                      className="w-full py-2.5 px-4 bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-500 hover:to-rose-600 text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-[0_0_18px_rgba(239,68,68,0.5)] transition-all flex items-center justify-center gap-2 cursor-pointer"
-                    >
-                      <Zap className="w-4 h-4 fill-white animate-pulse" />
-                      <span>⚡ Trip Line #{selectedLink.line_id}</span>
-                    </button>
-                  )}
-                </div>
+                )}
 
               </div>
             )}
 
-            {/* B. ELECTRICAL POWER NODE INSPECTION */}
+            {/* 2. ELECTRICAL POWER NODE INSPECTION */}
             {selectedNode && selectedNode.layer === 'POWER' && (
               <>
-                {/* 1. LOAD PERCENTAGE GAUGE & METRICS */}
+                {/* 2A. LOAD PERCENTAGE GAUGE & METRICS */}
                 {activeInspectorTab === 'TELEMETRY' && selectedBusTelemetry && (
                   <div className="flex flex-col gap-3">
                     
@@ -944,7 +1037,7 @@ export default function TopologyPage() {
                   </div>
                 )}
 
-                {/* 2. CASCADING IMPACT BREAKDOWN */}
+                {/* 2B. CASCADING IMPACT BREAKDOWN */}
                 {activeInspectorTab === 'IMPACT' && (
                   <div className="flex flex-col gap-3 font-mono text-xs">
                     {isSelectedBusTripped ? (
@@ -958,8 +1051,8 @@ export default function TopologyPage() {
                         </p>
                       </div>
                     ) : (
-                      <div className="bg-white/5 border border-white/10 rounded-xl p-3 text-[11px] text-gray-400">
-                        Substation {selectedNode.bus_id} is operating nominally. Click the <strong className="text-red-400">"Trip Failure"</strong> button below to simulate immediate breaker severance and cross-infrastructure cascade.
+                      <div className="bg-white/5 border border-white/10 rounded-xl p-3 text-[11px] text-gray-400 font-sans">
+                        Substation {selectedNode.bus_id} is operating nominally. Click the <strong className="text-red-400">"⚡ Trip Failure"</strong> button below to simulate immediate breaker severance and cross-infrastructure cascade.
                       </div>
                     )}
 
@@ -1043,7 +1136,7 @@ export default function TopologyPage() {
                   </div>
                 )}
 
-                {/* 3. FUTURE EFFECTS PREDICTIVE TIMELINE */}
+                {/* 2C. FUTURE EFFECTS PREDICTIVE TIMELINE */}
                 {activeInspectorTab === 'TIMELINE' && (
                   <div className="flex flex-col gap-2.5">
                     <span className="text-[11px] text-gray-400 font-mono uppercase tracking-wider">
@@ -1098,36 +1191,10 @@ export default function TopologyPage() {
                     </div>
                   </div>
                 )}
-
-                {/* PROMINENT "TRIP FAILURE" ACTION BUTTON */}
-                <div className="pt-2 border-t border-white/10 flex flex-col gap-2">
-                  {isSelectedBusTripped ? (
-                    <button
-                      onClick={() => handleRestoreBus(selectedNode.bus_id)}
-                      className="w-full py-2.5 px-4 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-[0_0_15px_rgba(16,185,129,0.4)] transition-all flex items-center justify-center gap-2 cursor-pointer"
-                    >
-                      <RefreshCw className="w-4 h-4" />
-                      <span>Restore Substation P{selectedNode.bus_id}</span>
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => handleTripBus(selectedNode.bus_id)}
-                      className="w-full py-2.5 px-4 bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-500 hover:to-rose-600 text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-[0_0_18px_rgba(239,68,68,0.5)] transition-all flex items-center justify-center gap-2 group cursor-pointer"
-                    >
-                      <Zap className="w-4 h-4 fill-white animate-pulse" />
-                      <span>⚡ Trip Failure on Substation P{selectedNode.bus_id}</span>
-                    </button>
-                  )}
-                  <p className="text-[10px] text-gray-500 text-center font-mono">
-                    {isSelectedBusTripped 
-                      ? 'Substation is currently offline. Restoring reconnects circuits and rebalances grid.'
-                      : 'Simulates instantaneous breaker trip, line disconnection & multi-sector cascade.'}
-                  </p>
-                </div>
               </>
             )}
 
-            {/* C. WATER NODE INSPECTION */}
+            {/* 3. WATER NODE INSPECTION */}
             {selectedNode && selectedNode.layer === 'WATER' && (
               <div className="flex flex-col gap-3 text-xs font-mono">
                 <div className="bg-[#121724] border border-white/10 rounded-xl p-3.5 flex flex-col gap-2.5">
@@ -1158,20 +1225,10 @@ export default function TopologyPage() {
                     </div>
                   )}
                 </div>
-
-                {selectedNode.power_bus_id !== undefined && (
-                  <button
-                    onClick={() => handleSelectSubstation(selectedNode.power_bus_id)}
-                    className="w-full py-2.5 px-3 bg-blue-950/70 hover:bg-blue-900 border border-blue-500/50 text-blue-300 font-sans font-bold text-xs uppercase rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    <Zap className="w-4 h-4 text-blue-400" />
-                    <span>Inspect Power Substation P{selectedNode.power_bus_id}</span>
-                  </button>
-                )}
               </div>
             )}
 
-            {/* D. TRANSPORTATION NODE INSPECTION */}
+            {/* 4. TRANSPORTATION NODE INSPECTION */}
             {selectedNode && selectedNode.layer === 'TRANSPORTATION' && (
               <div className="flex flex-col gap-3 text-xs font-mono">
                 <div className="bg-[#121724] border border-white/10 rounded-xl p-3.5 flex flex-col gap-2.5">
@@ -1200,20 +1257,10 @@ export default function TopologyPage() {
                     </div>
                   )}
                 </div>
-
-                {selectedNode.power_bus_id !== undefined && (
-                  <button
-                    onClick={() => handleSelectSubstation(selectedNode.power_bus_id)}
-                    className="w-full py-2.5 px-3 bg-blue-950/70 hover:bg-blue-900 border border-blue-500/50 text-blue-300 font-sans font-bold text-xs uppercase rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    <Zap className="w-4 h-4 text-blue-400" />
-                    <span>Inspect Power Substation P{selectedNode.power_bus_id}</span>
-                  </button>
-                )}
               </div>
             )}
 
-            {/* E. TELECOM NODE INSPECTION */}
+            {/* 5. TELECOM NODE INSPECTION */}
             {selectedNode && selectedNode.layer === 'TELECOM' && (
               <div className="flex flex-col gap-3 text-xs font-mono">
                 <div className="bg-[#121724] border border-white/10 rounded-xl p-3.5 flex flex-col gap-2.5">
@@ -1244,20 +1291,10 @@ export default function TopologyPage() {
                     </div>
                   )}
                 </div>
-
-                {selectedNode.power_bus_id !== undefined && (
-                  <button
-                    onClick={() => handleSelectSubstation(selectedNode.power_bus_id)}
-                    className="w-full py-2.5 px-3 bg-blue-950/70 hover:bg-blue-900 border border-blue-500/50 text-blue-300 font-sans font-bold text-xs uppercase rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    <Zap className="w-4 h-4 text-blue-400" />
-                    <span>Inspect Power Substation P{selectedNode.power_bus_id}</span>
-                  </button>
-                )}
               </div>
             )}
 
-            {/* F. HEALTHCARE NODE INSPECTION */}
+            {/* 6. HEALTHCARE NODE INSPECTION */}
             {selectedNode && selectedNode.layer === 'HEALTHCARE' && (
               <div className="flex flex-col gap-3 text-xs font-mono">
                 <div className="bg-[#121724] border border-white/10 rounded-xl p-3.5 flex flex-col gap-2.5">
@@ -1292,16 +1329,484 @@ export default function TopologyPage() {
                     </div>
                   )}
                 </div>
+              </div>
+            )}
 
-                {selectedNode.power_bus_id !== undefined && (
+            {/* 7. SECTOR DETAILS (When clicking any of the 5 layer buttons) */}
+            {selectedSector && (
+              <div className="flex flex-col gap-3 text-xs font-mono">
+                {selectedSector === 'POWER' && (
+                  <div className="flex flex-col gap-3">
+                    <div className="bg-[#121724] border border-white/10 rounded-xl p-3 flex flex-col gap-2 font-sans">
+                      <h5 className="font-bold text-white text-sm flex items-center gap-2">
+                        <Zap className="w-4 h-4 text-blue-400" />
+                        Bulk Power Transmission Grid (IEEE 39-Bus)
+                      </h5>
+                      <p className="text-gray-300 text-xs leading-relaxed">
+                        The primary power transmission backbone. When a substation trips or a line is severed, power flows are redistributed according to AC physical laws, modeled using GATv2 neural graph attention.
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="bg-[#121724] border border-white/10 rounded-xl p-2.5">
+                        <span className="text-gray-400 text-[10px]">SUBSTATIONS</span>
+                        <div className="text-white font-bold text-base">39 Total</div>
+                        <div className="text-red-400 text-[10px]">{summary.power_buses_offline} Offline</div>
+                      </div>
+                      <div className="bg-[#121724] border border-white/10 rounded-xl p-2.5">
+                        <span className="text-gray-400 text-[10px]">CORRIDORS</span>
+                        <div className="text-white font-bold text-base">46 Circuits</div>
+                        <div className="text-red-400 text-[10px]">{brokenLines.length} Disconnected</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {selectedSector === 'WATER' && (
+                  <div className="flex flex-col gap-3">
+                    <div className="bg-[#121724] border border-white/10 rounded-xl p-3 flex flex-col gap-2 font-sans">
+                      <h5 className="font-bold text-white text-sm flex items-center gap-2">
+                        <Droplets className="w-4 h-4 text-cyan-400" />
+                        Municipal Water Distribution System
+                      </h5>
+                      <p className="text-gray-300 text-xs leading-relaxed">
+                        Electric booster pumps lack battery storage (0h backup). Loss of substation power causes immediate loss of hydraulic pressure and loss of potable water transmission.
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="bg-[#121724] border border-white/10 rounded-xl p-2.5">
+                        <span className="text-gray-400 text-[10px]">BOOSTER PUMPS</span>
+                        <div className="text-cyan-400 font-bold text-base">{summary.water_pumps_tripped} Tripped</div>
+                        <div className="text-gray-400 text-[10px]">Immediate shutoff</div>
+                      </div>
+                      <div className="bg-[#121724] border border-white/10 rounded-xl p-2.5">
+                        <span className="text-gray-400 text-[10px]">FLOW DEFICIT</span>
+                        <div className="text-red-400 font-bold text-base">-{summary.estimated_water_loss_gpm.toLocaleString()}</div>
+                        <div className="text-gray-400 text-[10px]">Gallons / Minute</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {selectedSector === 'TRANSPORTATION' && (
+                  <div className="flex flex-col gap-3">
+                    <div className="bg-[#121724] border border-white/10 rounded-xl p-3 flex flex-col gap-2 font-sans">
+                      <h5 className="font-bold text-white text-sm flex items-center gap-2">
+                        <Car className="w-4 h-4 text-amber-400" />
+                        Regional Transportation & Traffic Control
+                      </h5>
+                      <p className="text-gray-300 text-xs leading-relaxed">
+                        Traffic controllers transition to flashing yellow or go completely dark within seconds of feeder failure. Electrified passenger rail corridors halt immediately due to traction power loss.
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="bg-[#121724] border border-white/10 rounded-xl p-2.5">
+                        <span className="text-gray-400 text-[10px]">SIGNAL INTERSECTIONS</span>
+                        <div className="text-amber-400 font-bold text-base">{summary.traffic_signals_offline || 0} Dark</div>
+                        <div className="text-gray-400 text-[10px]">Traffic gridlock</div>
+                      </div>
+                      <div className="bg-[#121724] border border-white/10 rounded-xl p-2.5">
+                        <span className="text-gray-400 text-[10px]">ELECTRIFIED RAIL</span>
+                        <div className="text-red-400 font-bold text-base">{summary.transit_corridors_impacted || 0} Lines</div>
+                        <div className="text-gray-400 text-[10px]">Traction power halted</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {selectedSector === 'TELECOM' && (
+                  <div className="flex flex-col gap-3">
+                    <div className="bg-[#121724] border border-white/10 rounded-xl p-3 flex flex-col gap-2 font-sans">
+                      <h5 className="font-bold text-white text-sm flex items-center gap-2">
+                        <Radio className="w-4 h-4 text-purple-400" />
+                        Telecommunications & Cellular Grid
+                      </h5>
+                      <p className="text-gray-300 text-xs leading-relaxed">
+                        Base stations operate on VRLA lead-acid backup batteries with 4 to 8 hours of autonomous reserve. Once drained at t &gt; 4h, coverage blackouts cascade rapidly.
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="bg-[#121724] border border-white/10 rounded-xl p-2.5">
+                        <span className="text-gray-400 text-[10px]">BATTERY BACKUP</span>
+                        <div className="text-purple-300 font-bold text-base">{summary.cell_towers_on_battery} Towers</div>
+                        <div className="text-gray-400 text-[10px]">Draining (4-8h limit)</div>
+                      </div>
+                      <div className="bg-[#121724] border border-white/10 rounded-xl p-2.5">
+                        <span className="text-gray-400 text-[10px]">BLACKOUT TOWERS</span>
+                        <div className="text-red-400 font-bold text-base">{summary.cell_towers_offline} Offline</div>
+                        <div className="text-gray-400 text-[10px]">Zero signal</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {selectedSector === 'HEALTHCARE' && (
+                  <div className="flex flex-col gap-3">
+                    <div className="bg-[#121724] border border-white/10 rounded-xl p-3 flex flex-col gap-2 font-sans">
+                      <h5 className="font-bold text-white text-sm flex items-center gap-2">
+                        <Hospital className="w-4 h-4 text-emerald-400" />
+                        Healthcare Emergency Facilities & Trauma Centers
+                      </h5>
+                      <p className="text-gray-300 text-xs leading-relaxed">
+                        Hospitals automatically kick in emergency diesel generators with on-site fuel for up to 72 hours. Prolonged outages threaten ICU patient life support and critical medicine refrigeration.
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="bg-[#121724] border border-white/10 rounded-xl p-2.5">
+                        <span className="text-gray-400 text-[10px]">HOSPITALS ON GENSET</span>
+                        <div className="text-emerald-400 font-bold text-base">{summary.hospitals_on_generator} Centers</div>
+                        <div className="text-gray-400 text-[10px]">Diesel consumption active</div>
+                      </div>
+                      <div className="bg-[#121724] border border-white/10 rounded-xl p-2.5">
+                        <span className="text-gray-400 text-[10px]">ICU BEDS AT RISK</span>
+                        <div className={`font-bold text-base ${summary.icu_beds_at_risk > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
+                          {summary.icu_beds_at_risk} Beds
+                        </div>
+                        <div className="text-gray-400 text-[10px]">Critical life support</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 8. SPECIAL VIEWS (Outage Control, Horizon Timeline, Summary Pill Clicks) */}
+            {selectedSpecialView === 'OUTAGE_CONTROL' && (
+              <div className="flex flex-col gap-3 font-mono text-xs">
+                <div className="bg-red-950/40 border border-red-500/50 rounded-xl p-3 flex flex-col gap-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-red-400 font-bold flex items-center gap-1.5 uppercase">
+                      <AlertTriangle className="w-4 h-4" />
+                      Active Contingency Summary
+                    </span>
+                    <span className="bg-red-500/20 text-red-300 px-2 py-0.5 rounded font-black">
+                      {brokenLines.length + trippedBuses.length} Severed
+                    </span>
+                  </div>
+                  <p className="text-gray-300 font-sans text-xs leading-relaxed">
+                    Contingencies represent broken transmission circuits and open substation circuit breakers. Power flows redistribute dynamically across parallel paths.
+                  </p>
+                </div>
+
+                <div className="bg-[#121724] border border-white/10 rounded-xl p-3 flex flex-col gap-2">
+                  <span className="text-gray-400 font-bold">Tripped Substation Breakers ({trippedBuses.length}):</span>
+                  {trippedBuses.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {trippedBuses.map(b => (
+                        <button
+                          key={b}
+                          onClick={() => handleSelectSubstation(b)}
+                          className="bg-red-900/60 border border-red-500/70 text-red-200 px-2.5 py-1 rounded-lg font-bold flex items-center gap-1 hover:bg-red-800 transition-colors cursor-pointer"
+                        >
+                          <Zap className="w-3 h-3 text-red-400" />
+                          <span>P{b}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-gray-500 italic">No substation breakers currently tripped.</span>
+                  )}
+                </div>
+
+                <div className="bg-[#121724] border border-white/10 rounded-xl p-3 flex flex-col gap-2">
+                  <span className="text-gray-400 font-bold">Severed Transmission Lines ({brokenLines.length}):</span>
+                  {brokenLines.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {brokenLines.map(l => (
+                        <button
+                          key={l}
+                          onClick={() => handleSelectLine(l)}
+                          className="bg-red-900/60 border border-red-500/70 text-red-200 px-2.5 py-1 rounded-lg font-bold hover:bg-red-800 transition-colors cursor-pointer"
+                        >
+                          Line #{l}
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-gray-500 italic">No transmission lines currently disconnected.</span>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {selectedSpecialView === 'HORIZON_TIMELINE' && (
+              <div className="flex flex-col gap-3 font-mono text-xs">
+                <div className="bg-amber-950/40 border border-amber-500/50 rounded-xl p-3 flex flex-col gap-2 font-sans">
+                  <div className="flex items-center justify-between">
+                    <span className="text-amber-400 font-bold font-mono text-sm flex items-center gap-1.5 uppercase">
+                      <Clock className="w-4 h-4" />
+                      Horizon: t = {timeHorizon} Hours Post-Outage
+                    </span>
+                  </div>
+                  <p className="text-gray-300 text-xs leading-relaxed">
+                    Predictive multi-infrastructure simulation at {timeHorizon}h showing cascading failure progression as battery systems deplete and emergency generators consume fuel.
+                  </p>
+                </div>
+
+                <div className="flex flex-col gap-2 font-sans">
+                  {timelineProgression.map(stage => (
+                    <div key={stage.stage} className="bg-[#121724] border border-white/10 rounded-xl p-3 flex flex-col gap-1.5">
+                      <div className="flex items-center justify-between font-mono">
+                        <span className="text-amber-400 font-bold text-xs bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30">
+                          {stage.time_horizon || stage.time_label || `t = ${stage.stage}h`}
+                        </span>
+                        <span className="text-[10px] text-red-400 font-bold uppercase">{stage.severity}</span>
+                      </div>
+                      <h6 className="font-bold text-white text-xs">{stage.phase || stage.phase_title}</h6>
+                      <p className="text-gray-300 text-xs">{stage.description}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {selectedSpecialView === 'OFFLINE_BUSES' && (
+              <div className="flex flex-col gap-3 font-mono text-xs">
+                <div className="bg-[#121724] border border-white/10 rounded-xl p-3 flex flex-col gap-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-400">Total Grid Substations:</span>
+                    <span className="text-white font-bold">39 Buses</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-400">Substations Offline:</span>
+                    <span className="text-red-400 font-bold">{summary.power_buses_offline} Buses</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-400">Directly Tripped Breakers:</span>
+                    <span className="text-red-400 font-bold">{trippedBuses.length} Breakers Open</span>
+                  </div>
+                </div>
+
+                <div className="bg-[#121724] border border-white/10 rounded-xl p-3 flex flex-col gap-2">
+                  <span className="text-gray-400">Click Substation to Inspect:</span>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {[3, 4, 5, 6, 7, 9, 10, 15, 17, 18, 21, 22, 35].map(b => (
+                      <button
+                        key={b}
+                        onClick={() => handleSelectSubstation(b)}
+                        className={`p-1.5 rounded-lg border text-center font-bold transition-all cursor-pointer ${
+                          trippedBuses.includes(b)
+                            ? 'bg-red-950 border-red-500 text-red-300'
+                            : 'bg-white/5 border-white/10 text-cyan-400 hover:bg-white/15'
+                        }`}
+                      >
+                        P{b}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {selectedSpecialView === 'PUMPS' && (
+              <div className="flex flex-col gap-3 font-mono text-xs">
+                <div className="bg-[#121724] border border-white/10 rounded-xl p-3.5 flex flex-col gap-2.5">
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-400">Water Booster Pumps Tripped:</span>
+                    <span className="text-cyan-400 font-bold">{summary.water_pumps_tripped} Pumps</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-400">Potable Water Deficit:</span>
+                    <span className="text-red-400 font-bold">-{summary.estimated_water_loss_gpm.toLocaleString()} GPM</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-400">Backup Storage Duration:</span>
+                    <span className="text-red-400 font-bold">0 Hours (Immediate Shutoff)</span>
+                  </div>
+                </div>
+                <div className="bg-[#121724] border border-white/10 rounded-xl p-3 flex flex-col gap-2">
+                  <span className="text-gray-400">Critical Water Boosters:</span>
                   <button
-                    onClick={() => handleSelectSubstation(selectedNode.power_bus_id)}
-                    className="w-full py-2.5 px-3 bg-blue-950/70 hover:bg-blue-900 border border-blue-500/50 text-blue-300 font-sans font-bold text-xs uppercase rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer"
+                    onClick={() => {
+                      const pump = graphData.nodes.find(n => n.is_pump);
+                      if (pump) openNodeDetails(pump);
+                    }}
+                    className="w-full py-2 px-3 bg-cyan-950/60 hover:bg-cyan-900 border border-cyan-500/50 text-cyan-300 rounded-lg font-bold flex items-center justify-center gap-2 cursor-pointer transition-colors"
                   >
-                    <Zap className="w-4 h-4 text-blue-400" />
-                    <span>Inspect Power Substation P{selectedNode.power_bus_id}</span>
+                    <Droplets className="w-4 h-4 text-cyan-400" />
+                    <span>Inspect Primary Booster Station</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {selectedSpecialView === 'SIGNALS' && (
+              <div className="flex flex-col gap-3 font-mono text-xs">
+                <div className="bg-[#121724] border border-white/10 rounded-xl p-3.5 flex flex-col gap-2.5">
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-400">Traffic Signals Offline:</span>
+                    <span className="text-amber-400 font-bold">{summary.traffic_signals_offline || 0} Dark Intersections</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-400">Transit Corridors Halted:</span>
+                    <span className="text-red-400 font-bold">{summary.transit_corridors_impacted || 0} Rail Lines</span>
+                  </div>
+                </div>
+                <div className="bg-[#121724] border border-white/10 rounded-xl p-3 flex flex-col gap-2">
+                  <span className="text-gray-400">Critical Traffic Zones:</span>
+                  <button
+                    onClick={() => {
+                      const tr = graphData.nodes.find(n => n.layer === 'TRANSPORTATION');
+                      if (tr) openNodeDetails(tr);
+                    }}
+                    className="w-full py-2 px-3 bg-amber-950/60 hover:bg-amber-900 border border-amber-500/50 text-amber-300 rounded-lg font-bold flex items-center justify-center gap-2 cursor-pointer transition-colors"
+                  >
+                    <Car className="w-4 h-4 text-amber-400" />
+                    <span>Inspect Dark Traffic Grid Zone</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {selectedSpecialView === 'ICU' && (
+              <div className="flex flex-col gap-3 font-mono text-xs">
+                <div className="bg-[#121724] border border-white/10 rounded-xl p-3.5 flex flex-col gap-2.5">
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-400">Hospitals on Diesel Genset:</span>
+                    <span className="text-emerald-400 font-bold">{summary.hospitals_on_generator} Trauma Centers</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-400">Critical Status (&lt;24h fuel):</span>
+                    <span className="text-amber-400 font-bold">{summary.hospitals_critical} Facilities</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-400">Licensed ICU Beds At Risk:</span>
+                    <span className={summary.icu_beds_at_risk > 0 ? 'text-red-400 font-bold' : 'text-emerald-400 font-bold'}>
+                      {summary.icu_beds_at_risk} Beds
+                    </span>
+                  </div>
+                </div>
+                <div className="bg-[#121724] border border-white/10 rounded-xl p-3 flex flex-col gap-2">
+                  <span className="text-gray-400">Hospital Facilities:</span>
+                  <button
+                    onClick={() => {
+                      const hosp = graphData.nodes.find(n => n.layer === 'HEALTHCARE');
+                      if (hosp) openNodeDetails(hosp);
+                    }}
+                    className="w-full py-2 px-3 bg-emerald-950/60 hover:bg-emerald-900 border border-emerald-500/50 text-emerald-300 rounded-lg font-bold flex items-center justify-center gap-2 cursor-pointer transition-colors"
+                  >
+                    <Hospital className="w-4 h-4 text-emerald-400" />
+                    <span>Inspect Regional Trauma Center</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+          </div>
+
+          {/* ===================== PINNED FOOTER (ALWAYS VISIBLE & 100% CLICKABLE) ===================== */}
+          <div className="p-4 border-t border-white/10 bg-[#0b0e17] shrink-0 flex flex-col gap-2">
+            
+            {/* If inspecting an electrical power substation */}
+            {selectedNode && selectedNode.layer === 'POWER' && (
+              <>
+                {isSelectedBusTripped ? (
+                  <button
+                    onClick={() => handleRestoreBus(selectedNode.bus_id)}
+                    className="w-full py-2.5 px-4 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-[0_0_15px_rgba(16,185,129,0.4)] transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    <span>Restore Substation P{selectedNode.bus_id}</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => handleTripBus(selectedNode.bus_id)}
+                    className="w-full py-2.5 px-4 bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-500 hover:to-rose-600 text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-[0_0_18px_rgba(239,68,68,0.5)] transition-all flex items-center justify-center gap-2 group cursor-pointer"
+                  >
+                    <Zap className="w-4 h-4 fill-white animate-pulse" />
+                    <span>⚡ Trip Failure on Substation P{selectedNode.bus_id}</span>
                   </button>
                 )}
+                <p className="text-[10px] text-gray-500 text-center font-mono">
+                  {isSelectedBusTripped 
+                    ? 'Substation is offline. Restoring reconnects circuits and rebalances grid.'
+                    : 'Simulates instantaneous breaker trip, line disconnection & multi-sector cascade.'}
+                </p>
+              </>
+            )}
+
+            {/* If inspecting a transmission line */}
+            {selectedLink && selectedLink.line_id !== undefined && (
+              <>
+                {brokenLines.includes(selectedLink.line_id) ? (
+                  <button
+                    onClick={() => handleToggleLine(selectedLink.line_id)}
+                    className="w-full py-2.5 px-4 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-[0_0_15px_rgba(16,185,129,0.4)] transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    <span>Restore Transmission Line #{selectedLink.line_id}</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => handleToggleLine(selectedLink.line_id)}
+                    className="w-full py-2.5 px-4 bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-500 hover:to-rose-600 text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-[0_0_18px_rgba(239,68,68,0.5)] transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <Zap className="w-4 h-4 fill-white animate-pulse" />
+                    <span>⚡ Trip Line #{selectedLink.line_id}</span>
+                  </button>
+                )}
+              </>
+            )}
+
+            {/* If inspecting an inter-dependency link */}
+            {selectedLink && selectedLink.line_id === undefined && (
+              <button
+                onClick={() => handleSelectSubstation(getBusIdFromRef(selectedLink.source))}
+                className="w-full py-2.5 px-4 bg-blue-950/70 hover:bg-blue-900 border border-blue-500/50 text-blue-300 font-bold text-xs uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Zap className="w-4 h-4 text-blue-400" />
+                <span>Inspect Feeder Substation P{getBusIdFromRef(selectedLink.source)}</span>
+              </button>
+            )}
+
+            {/* If inspecting a non-power node (Water, Transportation, Telecom, Healthcare) */}
+            {selectedNode && selectedNode.layer !== 'POWER' && selectedNode.power_bus_id !== undefined && (
+              <button
+                onClick={() => handleSelectSubstation(selectedNode.power_bus_id)}
+                className="w-full py-2.5 px-4 bg-blue-950/70 hover:bg-blue-900 border border-blue-500/50 text-blue-300 font-bold text-xs uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Zap className="w-4 h-4 text-blue-400" />
+                <span>⚡ Inspect Power Substation P{selectedNode.power_bus_id}</span>
+              </button>
+            )}
+
+            {/* If viewing Outage Control panel */}
+            {selectedSpecialView === 'OUTAGE_CONTROL' && (brokenLines.length > 0 || trippedBuses.length > 0) && (
+              <button
+                onClick={handleResetAllOutages}
+                className="w-full py-2.5 px-4 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-[0_0_15px_rgba(16,185,129,0.4)] transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <RefreshCw className="w-4 h-4" />
+                <span>Restore All Lines & Substations</span>
+              </button>
+            )}
+
+            {/* If viewing Sector details */}
+            {selectedSector && (
+              <button
+                onClick={() => toggleLayer(selectedSector)}
+                className="w-full py-2.5 px-4 bg-white/10 hover:bg-white/15 border border-white/20 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Layers className="w-4 h-4 text-cyan-400" />
+                <span>Toggle {selectedSector} Layer Visibility</span>
+              </button>
+            )}
+
+            {/* If viewing Horizon timeline */}
+            {selectedSpecialView === 'HORIZON_TIMELINE' && (
+              <div className="flex gap-2">
+                {[0, 4, 12, 24, 72].map(h => (
+                  <button
+                    key={h}
+                    onClick={() => setTimeHorizon(h)}
+                    className={`flex-1 py-1.5 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer ${
+                      timeHorizon === h 
+                        ? 'bg-amber-400 text-slate-950' 
+                        : 'bg-white/5 text-gray-400 hover:text-white'
+                    }`}
+                  >
+                    {h}h
+                  </button>
+                ))}
               </div>
             )}
 
