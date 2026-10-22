@@ -2,12 +2,11 @@
 
 [![Python](https://img.shields.io/badge/Python-3.9%2B-blue.svg?logo=python&logoColor=white)](https://www.python.org/)
 [![Apache Spark](https://img.shields.io/badge/Apache%20Spark-4.0%2B-E25A1C.svg?logo=apachespark&logoColor=white)](https://spark.apache.org/)
+[![Tableau](https://img.shields.io/badge/Tableau-Desktop%20%26%20Public-E97627.svg?logo=tableau&logoColor=white)](https://www.tableau.com/)
 [![PyTorch Geometric](https://img.shields.io/badge/PyTorch%20Geometric-2.4%2B-EE4C2C.svg?logo=pytorch&logoColor=white)](https://pytorch-geometric.readthedocs.io/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.100%2B-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
-[![React](https://img.shields.io/badge/React-18-61DAFB.svg?logo=react&logoColor=black)](https://react.dev/)
-[![Tailwind CSS](https://img.shields.io/badge/TailwindCSS-3.4-38B2AC.svg?logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
 
-**GridX** is a unified, Big Data-powered **Multi-Infrastructure Cascading Failure Prediction & Simulation Platform**. It leverages **Apache Spark** for high-volume data preprocessing, distributed geospatial joins, and parallel Monte Carlo simulations, coupled with **PyTorch Graph Neural Networks (GNNs)** and a real-time **React + Tailwind telemetry dashboard** to model how catastrophic failures ripple across interconnected critical infrastructure systems.
+**GridX** is a unified, Big Data-powered **Multi-Infrastructure Cascading Failure Prediction & Simulation Platform**. It leverages **Apache Spark** for high-volume data preprocessing, distributed geospatial joins, and parallel Monte Carlo simulations, coupled with **PyTorch Graph Neural Networks (GNNs)** and an enterprise **Tableau Business Intelligence & Geospatial Analytics Suite** as its **sole, dedicated visualization and reporting platform** to model and visualize how catastrophic electrical failures ripple across interconnected critical infrastructure systems.
 
 ---
 
@@ -27,11 +26,11 @@
     *   ⏱️ **$t = 0\text{h}$ (Initial Shock):** Power bus drops $\rightarrow$ Connected water booster pumps cut off immediately ($0\text{h}$ buffer) $\rightarrow$ Water pressure deficits occur.
     *   ⏱️ **$t = 4\text{ to }8\text{h}$ (Communications Drop):** Cell towers exhaust backup batteries and go dark $\rightarrow$ Loss of wireless SCADA telemetry hinders grid reclosers.
     *   ⏱️ **$t = 72\text{h}$ (Healthcare Crisis):** Hospitals on isolated buses exhaust on-site diesel fuel reserves $\rightarrow$ Critical ICU alarms triggered.
-*   **Interactive 4-Sector Telemetry Dashboard:**
-    *   **Layer Selector:** Checkbox controls to toggle **⚡ Power**, **💧 Water**, **📡 Telecom**, and **🏥 Healthcare** graph overlays on/off.
-    *   **Cascade Time Horizon Slider ($0\text{h} \rightarrow 72\text{h}$):** Interactively step through the cascade timeline to watch failures ripple.
-    *   **Custom Force-Directed Canvas:** Visually differentiates Power (blue/red glowing circles), Water (cyan squares), Telecom (purple diamonds), and Hospitals (emerald/crimson crosses).
-    *   **Multi-Sector Crisis Meter:** Live telemetry counters tracking water loss ($\text{GPM}$), depleted cell towers, and critical ICU beds.
+*   **Tableau Master Visualization Suite (Dedicated Visualization Engine):**
+    *   **Multi-Sector Infrastructure GIS Topology:** Geospatially plots **63,949 critical facilities** across Power, Water, Telecom, and Healthcare with sector-specific symbology and vulnerability tiers.
+    *   **Dual-Axis Transmission Corridors:** Utilizes Tableau's **Line / Path mark types** across **5,000 transmission circuits** (10,000 waypoints) to visualize electric power flow corridors and thermal ratings.
+    *   **Cascading Contingency & Overload Risk Heatmap:** Cross-tabulates **70,000 power flow scenarios**, line loadings ($>100\%$ trip threshold), and secondary cascading probabilities.
+    *   **NOAA Severe Weather & Storm Corpus:** Maps **15,000 extreme weather events** (2015–2024) to evaluate weather hazard exposure against regional grid infrastructure.
 *   **AI Graph Attention Network (GAT):**
     *   A custom PyTorch Geometric neural network trained to understand spatial electrical relationships and predict branch tripping probabilities (85.8% F1 benchmark).
 
@@ -39,19 +38,18 @@
 
 ## 🏗️ System Architecture
 
-```
+```text
 ┌────────────────────────────────────────────────────────────────────────┐
-│                        REACT TELEMETRY DASHBOARD                       │
-│    • 4-Layer Selector (⚡ Power, 💧 Water, 📡 Telecom, 🏥 Healthcare) │
-│    • Cascade Time Horizon Slider (0h ──► 4h ──► 12h ──► 24h ──► 72h)    │
-│    • Multi-Sector Crisis Meter & Force-Directed Canvas Visualizer      │
+│             TABLEAU BUSINESS INTELLIGENCE & VISUALIZATION              │
+│    • Multi-Sector Infrastructure GIS Topology (63,949 assets)         │
+│    • Dual-Axis Transmission Line Corridors & Path Mark Mapping        │
+│    • AI Contingency Risk Heatmap & Cascading Failure Matrix           │
+│    • 10-Year NOAA Severe Weather Hazard & Grid Disruption Overlays    │
 └───────────────────────────────────▲────────────────────────────────────┘
-                                    │ HTTP / REST
+                                    │ Automated Data Marts (tableau/*.csv)
 ┌───────────────────────────────────┴────────────────────────────────────┐
-│                         FASTAPI BACKEND ENGINE                         │
-│    • POST /api/hetero/simulate  (Real-time multi-sector graph serving) │
-│    • GET  /api/spark/rankings   (Spark SQL Substation Criticality)     │
-│    • GET  /api/spark/monte-carlo(Monte Carlo temporal decay telemetry) │
+│                AUTOMATED TABLEAU EXPORT PIPELINE                       │
+│                (src/visualization/export_for_tableau.py)               │
 └───────────────────▲────────────────────────────────▲───────────────────┘
                     │                                │
 ┌───────────────────┴──────────────┐   ┌─────────────┴──────────────────┐
@@ -116,9 +114,9 @@ Aggregated across 250 parallel contingency runs:
 ### Prerequisites
 * **Python 3.9+**
 * **Java 17 (LTS)** (Required for Apache Spark / PySpark 4.0)
-* **Node.js 18+** & `npm`
+* **Tableau Desktop** or **Tableau Public** (Free)
 
-### 1. Backend & PySpark Pipelines Setup
+### 1. PySpark Big Data Lakehouse & AI Engine Setup
 From the repository root:
 
 ```bash
@@ -140,37 +138,47 @@ python src/spark/spatial_join.py
 
 # Step 3: Run PySpark Distributed Monte Carlo Simulation
 python src/spark/distributed_simulator.py
-
-# Step 4: Launch the FastAPI Backend
-uvicorn src.api:app --host 0.0.0.0 --port 8000 --reload
 ```
-*The backend API will be running at `http://localhost:8000`*
 
-### 2. Frontend React Dashboard Setup
-Open a new terminal window:
+### 2. Generate Tableau Data Marts (Sole Visualization Tier)
+Extract the multi-sector lakehouse into curated, Tableau-optimized schemas:
 
 ```bash
-cd frontend
-npm install
-npm run dev
+python src/visualization/export_for_tableau.py
 ```
-*The interactive dashboard will be running at `http://localhost:5173`*
+This generates 4 standardized CSV data marts in `tableau/`:
+* `tableau/tableau_national_infrastructure.csv` (63,949 facilities across Power, Water, Telecom, Healthcare)
+* `tableau/tableau_transmission_line_paths.csv` (10,000 corridor waypoints with point-order indexing)
+* `tableau/tableau_cascading_risk.csv` (70,000 power flow contingency scenarios)
+* `tableau/tableau_severe_weather_hazards.csv` (15,000 NOAA storm hazard records)
+
+*(Optional / Supplementary: Developer headless test harness API can be launched via `uvicorn src.api:app --port 8000`)*
 
 ---
 
-## 🖥️ Usage Guide
+## 📊 Tableau Visualization Guide
 
-1. Open **`http://localhost:5173`** in your browser.
-2. **Toggle Infrastructure Layers:** On the left sidebar, toggle **⚡ Power**, **💧 Water**, **📡 Telecom**, and **🏥 Healthcare** overlays on the force graph.
-3. **Simulate Disaster Shocks:**
-   * Adjust the **Heatwave Load Multiplier** slider ($0.8\times \dots 2.2\times$).
-   * Click **"⚡ Force Trip Random Line"** or select specific transmission lines to cut.
-4. **Step Through the Cascade Timeline:**
-   * Drag the **Cascade Horizon Slider** ($0\text{h} \rightarrow 4\text{h} \rightarrow 12\text{h} \rightarrow 24\text{h} \rightarrow 72\text{h}$).
-   * Watch water pumps trip immediately at $0\text{h}$.
-   * Watch cell towers deplete batteries and drop at $12\text{h}$.
-   * Watch hospitals exhaust generator diesel at $72\text{h}$, triggering critical ICU alarms.
-5. **View Spark Analytics:** Navigate to the **Analytics** page in the top menu to view the **Spark SQL Substation Criticality Rankings** and **Temporal Decay Charts**.
+Tableau serves as the **sole, dedicated visualization and analytics platform** for GridX. Follow the complete step-by-step tutorial in [`tableau/TABLEAU_TUTORIAL.md`](file:///Users/sumitsinha/Documents/GridX/tableau/TABLEAU_TUTORIAL.md) to explore the 4 core dashboards:
+
+### 1. Multi-Sector Infrastructure Geospatial Topology
+* **Source:** `tableau/tableau_national_infrastructure.csv`
+* **Visual Mark:** Shape / Circle mark on geographic Latitude / Longitude.
+* **Layers:** Differentiates **⚡ Power Grid**, **💧 Water Supply**, **📡 Telecom**, and **🏥 Healthcare** across North America with interactive filters for `Sector`, `Vulnerability Tier`, and `Region`.
+
+### 2. Transmission Line Geographic Corridors (Path Marks)
+* **Source:** `tableau/tableau_transmission_line_paths.csv`
+* **Visual Mark:** **Line** mark with `line_id` on **Detail** and `point_order` on **Path**.
+* **Analysis:** Color-codes corridors by voltage ($kV$) and thermal loading percentage ($<80\%$ Safe, $80-99\%$ Stressed, $\ge 100\%$ Critical Overload).
+
+### 3. Cascading Failure & GNN Prediction Risk Matrix
+* **Source:** `tableau/tableau_cascading_risk.csv`
+* **Visual Mark:** Heatmap / Diverging Color Grid.
+* **Analysis:** Cross-references transmission line IDs against heatwave stress conditions to visualize thermal overloads and GNN secondary failure probabilities.
+
+### 4. NOAA Severe Weather & Extreme Grid Hazard Impact
+* **Source:** `tableau/tableau_severe_weather_hazards.csv`
+* **Visual Mark:** Spatial Density / Heatmap mark.
+* **Analysis:** Correlates 10 years of NOAA severe storms (hurricanes, tornadoes, winter storms) against vulnerable power lines and regional infrastructure with an interactive yearly time slider.
 
 ---
 
@@ -179,27 +187,34 @@ npm run dev
 ```text
 GridX/
 ├── data/
-│   ├── case39.m                 # IEEE 39-bus power grid benchmark
-│   ├── raw/                     # Raw datasets (Net3.inp, cell_towers.csv, hospitals.csv)
-│   └── processed/               # Clean Parquet Lakehouse & dependency tables
+│   ├── case39.m                        # IEEE 39-bus power grid benchmark
+│   ├── raw/                            # Raw benchmark datasets (EPA Net3, FCC, HIFLD)
+│   ├── raw_large/                      # National-scale infrastructure corpus
+│   └── processed/                      # Parquet Lakehouse & dependency tables
 ├── src/
-│   ├── ai_engine.py             # PyTorch Geometric GAT model loader & inference
-│   ├── api.py                   # FastAPI multi-infrastructure REST endpoints
-│   ├── gnn_model.py             # Graph Attention Network (GAT) architecture
+│   ├── ai_engine.py                    # PyTorch Geometric GAT model loader & inference
+│   ├── gnn_model.py                    # Graph Attention Network (GAT) architecture
+│   ├── api.py                          # Auxiliary simulation endpoints (Spark SQL & cascade serving)
 │   ├── simulation/
-│   │   └── hetero_cascade.py    # Multi-layer temporal cascade physics engine
-│   └── spark/
-│       ├── preprocess_and_clean.py   # PySpark schema normalization & cleaning
-│       ├── spatial_join.py           # PySpark Haversine broadcast join & Spark SQL rankings
-│       └── distributed_simulator.py  # PySpark parallel Monte Carlo simulator
-├── frontend/                    # Vite + React 18 + Tailwind telemetry dashboard
-│   ├── src/
-│   │   ├── pages/
-│   │   │   ├── TopologyPage.tsx # 4-sector force-directed graph & cascade controls
-│   │   │   └── AnalyticsPage.tsx# Spark SQL rankings table & decay charts
-│   │   └── App.tsx
-│   └── package.json
-└── README.md                    # Project documentation
+│   │   └── hetero_cascade.py           # Multi-layer temporal cascade physics engine
+│   ├── spark/
+│   │   ├── preprocess_and_clean.py     # PySpark schema normalization & cleaning
+│   │   ├── spatial_join.py             # PySpark Haversine broadcast join & Spark SQL rankings
+│   │   ├── distributed_simulator.py    # PySpark parallel Monte Carlo simulator
+│   │   └── expand_lakehouse.py         # Multi-grid expansion and synthetic scaling
+│   ├── visualization/
+│   │   └── export_for_tableau.py       # Automated Tableau data mart export pipeline
+│   └── data_expansion/
+│       ├── generate_multigrid_corpus.py# Regional synthetic multi-grid generator
+│       └── generate_national_infra.py  # National-scale infrastructure dataset generator
+├── tableau/                            # Sole Official Visualization Tier
+│   ├── TABLEAU_TUTORIAL.md             # Complete step-by-step Tableau dashboard master guide
+│   ├── tableau_national_infrastructure.csv   # 63,949 critical facilities across 4 sectors
+│   ├── tableau_transmission_line_paths.csv   # 5,000 corridors with point-order for line mapping
+│   ├── tableau_cascading_risk.csv            # 70,000 power flow contingency scenarios
+│   └── tableau_severe_weather_hazards.csv    # 15,000 NOAA extreme hazard records
+├── frontend/                           # (Archived / supplementary interactive telemetry harness)
+└── README.md                           # Master project documentation
 ```
 
 ---
