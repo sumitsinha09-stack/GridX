@@ -12,6 +12,7 @@ import {
   RotateCcw,
   Gauge
 } from 'lucide-react';
+import { useTheme } from '../context/ThemeContext';
 
 interface SummaryMetrics {
   time_horizon_hours: number;
@@ -29,6 +30,8 @@ interface SummaryMetrics {
 }
 
 export default function TopologyPage() {
+  const { isLight } = useTheme();
+
   // Core simulation controls
   const [multiplier, setMultiplier] = useState<number>(1.30);
   const [brokenLines, setBrokenLines] = useState<number[]>([6, 2, 3]);
@@ -37,7 +40,7 @@ export default function TopologyPage() {
   const [nodeVoltages, setNodeVoltages] = useState<Record<number, number>>({});
   const [enabledLayers, setEnabledLayers] = useState<string[]>(['POWER', 'WATER', 'TELECOM', 'HEALTHCARE']);
 
-  // Selected Substation Bus ID (Default to Substation 14 for instant rich details)
+  // Selected Substation Bus ID (Default to Substation 14)
   const [selectedBusId, setSelectedBusId] = useState<number>(13);
   const [selectedOtherNode, setSelectedOtherNode] = useState<any | null>(null);
 
@@ -90,6 +93,14 @@ export default function TopologyPage() {
       clearTimeout(timer);
     };
   }, []);
+
+  // Configure D3 Force simulation to spread nodes gracefully
+  useEffect(() => {
+    if (fgRef.current) {
+      fgRef.current.d3Force('charge')?.strength(-140);
+      fgRef.current.d3Force('link')?.distance(55);
+    }
+  }, [graphData]);
 
   // Run backend simulation
   const runSimulation = useCallback(async () => {
@@ -213,7 +224,6 @@ export default function TopologyPage() {
 
   const handleVoltageChange = (busId: number, val: number) => {
     setNodeVoltages(prev => ({ ...prev, [busId]: val }));
-    // Also stress demand multiplier proportionally to show electrical surge
     setNodeMultipliers(prev => ({ ...prev, [busId]: val }));
   };
 
@@ -267,12 +277,10 @@ export default function TopologyPage() {
     const clickX = e.clientX - rect.left;
     const clickY = e.clientY - rect.top;
 
-    // Convert screen pixel coordinates to graph coordinates
     try {
       const coords = fgRef.current.screen2GraphCoords(clickX, clickY);
       if (!coords) return;
 
-      // Find closest node within 24 graph units
       let closestNode: any = null;
       let minDistance = 24;
 
@@ -294,7 +302,7 @@ export default function TopologyPage() {
     }
   };
 
-  // Pointer Area Paint for ForceGraph2D (High hit detection radius)
+  // Pointer Area Paint for ForceGraph2D
   const paintNodePointerArea = useCallback((node: any, color: string, ctx: CanvasRenderingContext2D) => {
     ctx.beginPath();
     ctx.arc(node.x, node.y, 18, 0, 2 * Math.PI, false);
@@ -308,41 +316,45 @@ export default function TopologyPage() {
     const isTripped = (node.bus_id !== undefined && trippedBuses.includes(node.bus_id)) || node.is_tripped;
     const isFailed = node.is_failed || node.risk > 0.70;
 
-    let radius = 7;
-    let fill = '#10b981'; // Green default nominal
+    let radius = 7.5;
+    let fill = isLight ? '#2563eb' : '#3b82f6'; // Strong blue for power
 
     if (node.layer === 'POWER') {
-      radius = 8;
+      radius = 8.5;
       if (isTripped || isFailed) {
-        fill = '#ef4444'; // Red for failed power bus
+        fill = '#dc2626'; // Bold crimson
       } else if (node.risk > 0.40) {
-        fill = '#eab308'; // Amber for warning
+        fill = '#d97706'; // Bold amber
       } else {
-        fill = '#10b981'; // Nominal green
+        fill = isLight ? '#2563eb' : '#38bdf8'; // High contrast blue
       }
     } else if (node.layer === 'WATER') {
-      radius = 5.5;
-      fill = isFailed ? '#ef4444' : '#06b6d4'; // Red if pump offline, cyan if pumping
-    } else if (node.layer === 'TELECOM') {
-      radius = 5.5;
-      fill = node.status === 'BATTERY_EXHAUSTED' || isFailed 
-        ? '#ef4444' 
-        : node.status === 'ON_BACKUP_BATTERY' 
-          ? '#f59e0b' 
-          : '#a855f7'; // Purple or Amber or Red
-    } else if (node.layer === 'HEALTHCARE') {
       radius = 6;
-      fill = isFailed ? '#ef4444' : node.status === 'ON_EMERGENCY_GENERATOR' ? '#f59e0b' : '#10b981';
+      fill = isFailed ? '#dc2626' : (isLight ? '#0891b2' : '#06b6d4');
+    } else if (node.layer === 'TELECOM') {
+      radius = 6;
+      fill = node.status === 'BATTERY_EXHAUSTED' || isFailed 
+        ? '#dc2626' 
+        : node.status === 'ON_BACKUP_BATTERY' 
+          ? '#d97706' 
+          : (isLight ? '#7c3aed' : '#a855f7');
+    } else if (node.layer === 'HEALTHCARE') {
+      radius = 6.5;
+      fill = isFailed 
+        ? '#dc2626' 
+        : node.status === 'ON_EMERGENCY_GENERATOR' 
+          ? '#d97706' 
+          : (isLight ? '#059669' : '#10b981');
     }
 
     // Outer glow for selected node
     if (isSelected) {
       ctx.beginPath();
       ctx.arc(node.x, node.y, radius + 7, 0, 2 * Math.PI, false);
-      ctx.fillStyle = 'rgba(0, 229, 255, 0.4)';
+      ctx.fillStyle = isLight ? 'rgba(14, 165, 233, 0.35)' : 'rgba(0, 229, 255, 0.4)';
       ctx.fill();
       ctx.lineWidth = 3;
-      ctx.strokeStyle = '#00e5ff';
+      ctx.strokeStyle = isLight ? '#0284c7' : '#00e5ff';
       ctx.stroke();
     }
 
@@ -351,8 +363,8 @@ export default function TopologyPage() {
     ctx.arc(node.x, node.y, radius, 0, 2 * Math.PI, false);
     ctx.fillStyle = fill;
     ctx.fill();
-    ctx.lineWidth = 1.8;
-    ctx.strokeStyle = isSelected ? '#ffffff' : '#0b0e17';
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = isSelected ? '#ffffff' : (isLight ? '#ffffff' : '#070a12');
     ctx.stroke();
 
     // Node Label
@@ -367,59 +379,92 @@ export default function TopologyPage() {
       label = 'H';
     }
 
-    ctx.font = `700 ${9 / globalScale}px Inter, sans-serif`;
-    ctx.fillStyle = isSelected ? '#00e5ff' : node.layer === 'POWER' ? '#cbd5e1' : '#64748b';
+    ctx.font = `800 ${10 / globalScale}px Inter, sans-serif`;
+    ctx.fillStyle = isSelected 
+      ? (isLight ? '#0284c7' : '#00e5ff') 
+      : isLight 
+        ? '#0f172a' 
+        : (node.layer === 'POWER' ? '#f1f5f9' : '#94a3b8');
     ctx.textAlign = 'center';
-    ctx.fillText(label, node.x, node.y + radius + 11);
-  }, [selectedBusId, selectedOtherNode, trippedBuses]);
+    ctx.fillText(label, node.x, node.y + radius + 12);
+  }, [selectedBusId, selectedOtherNode, trippedBuses, isLight]);
 
   // Current voltage calculations for selected substation
   const currentVoltageMult = nodeVoltages[selectedBusId] || 1.0;
   const nominalVoltageKv = currentSubstationTelemetry.voltage_kv || 345.0;
   const displayVoltageKv = (nominalVoltageKv * currentVoltageMult).toFixed(1);
 
+  // Theme-aware Solid Class Tokens (Zero transparency, high contrast)
+  const cardBgClass = isLight 
+    ? 'bg-white border-slate-200 text-slate-900 shadow-md' 
+    : 'bg-[#101522] border-white/10 text-white shadow-2xl';
+
+  const innerBoxClass = isLight
+    ? 'bg-[#f8fafc] border-slate-200 text-slate-800'
+    : 'bg-[#141b2c] border-white/5 text-gray-200';
+
+  const itemBoxClass = isLight
+    ? 'bg-white border-slate-200 text-slate-900 shadow-sm'
+    : 'bg-[#090d16] border-white/5 text-gray-200';
+
+  const headerTextClass = isLight ? 'text-slate-900 font-extrabold' : 'text-white font-extrabold';
+  const labelTextClass = isLight ? 'text-slate-600 font-medium' : 'text-gray-400';
+  const canvasBg = isLight ? '#f8fafc' : '#0b0e17';
+
   return (
-    <div className="flex-1 w-full h-full flex bg-[#07090e] text-gray-200 font-sans overflow-hidden p-3 gap-3 select-none">
+    <div className={`flex-1 w-full h-full flex font-sans overflow-hidden p-3 gap-3 select-none transition-colors duration-200 ${
+      isLight ? 'bg-[#f1f5f9] text-slate-900' : 'bg-[#07090e] text-gray-200'
+    }`}>
 
       {/* ========================================================================= */}
-      {/* 1. LEFT CANVAS: INTERACTIVE GRID WITH RELIABLE HIT-TESTING                */}
+      {/* 1. LEFT CANVAS: INTERACTIVE GRID WITH CRISP TECHNICAL VIEW                */}
       {/* ========================================================================= */}
       <div 
         ref={containerRef}
         onClick={handleCanvasContainerClick}
-        className="flex-1 h-full bg-[#0b0e17] rounded-2xl border border-white/10 relative overflow-hidden flex flex-col shadow-2xl cursor-pointer"
+        className={`flex-1 h-full rounded-2xl border relative overflow-hidden flex flex-col shadow-xl cursor-pointer transition-colors duration-200 ${
+          isLight ? 'bg-[#f8fafc] border-slate-200' : 'bg-[#0b0e17] border-white/10'
+        }`}
       >
         {/* Top-Left: Network Identifier + Substation Dropdown Selector */}
-        <div className="absolute top-3.5 left-4 z-20 flex items-center gap-2.5 bg-[#101522]/95 backdrop-blur-md border border-white/10 px-3 py-1.5 rounded-xl shadow-lg pointer-events-auto">
-          <Zap className="w-4 h-4 text-cyan-400" />
-          <span className="font-extrabold text-white text-xs tracking-wider">IEEE 39-Bus</span>
+        <div className={`absolute top-3.5 left-4 z-20 flex items-center gap-2.5 border px-3 py-1.5 rounded-xl shadow-md pointer-events-auto transition-colors ${
+          isLight ? 'bg-white border-slate-200 text-slate-900' : 'bg-[#101522] border-white/10 text-white'
+        }`}>
+          <Zap className="w-4 h-4 text-cyan-500" />
+          <span className={`font-extrabold text-xs tracking-wider ${headerTextClass}`}>IEEE 39-Bus</span>
           
-          {/* Quick Substation Select Dropdown: Guarantees 100% selectability */}
-          <div className="relative flex items-center ml-1 pl-2 border-l border-white/10">
+          {/* Quick Substation Select Dropdown */}
+          <div className="relative flex items-center ml-1 pl-2 border-l border-slate-300 dark:border-white/10">
             <select
               value={selectedBusId}
               onChange={(e) => setSelectedBusId(parseInt(e.target.value))}
-              className="bg-[#141b2c] text-cyan-300 font-mono text-xs font-bold py-1 px-2.5 rounded-lg border border-cyan-500/30 focus:outline-none focus:border-cyan-400 cursor-pointer"
+              className={`font-mono text-xs font-bold py-1 px-2.5 rounded-lg border focus:outline-none cursor-pointer ${
+                isLight 
+                  ? 'bg-slate-100 text-slate-900 border-slate-300 focus:border-cyan-600' 
+                  : 'bg-[#141b2c] text-cyan-300 border-cyan-500/30 focus:border-cyan-400'
+              }`}
             >
               {Array.from({ length: 39 }).map((_, i) => (
-                <option key={i} value={i} className="bg-[#101522] text-white">
+                <option key={i} value={i} className={isLight ? 'bg-white text-slate-900' : 'bg-[#101522] text-white'}>
                   Substation #{i + 1} {trippedBuses.includes(i) ? '🔴 (TRIPPED)' : ''}
                 </option>
               ))}
             </select>
-            <ChevronDown className="w-3.5 h-3.5 text-cyan-400 ml-1 pointer-events-none" />
+            <ChevronDown className="w-3.5 h-3.5 text-cyan-500 ml-1 pointer-events-none" />
           </div>
 
           {loading && <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping ml-1" />}
         </div>
 
         {/* Top-Right: Department Overlays (Power, Water, Telecom, Healthcare) */}
-        <div className="absolute top-3.5 right-4 z-20 flex items-center gap-1.5 bg-[#101522]/95 backdrop-blur-md border border-white/10 p-1 rounded-xl shadow-lg pointer-events-auto">
+        <div className={`absolute top-3.5 right-4 z-20 flex items-center gap-1.5 border p-1 rounded-xl shadow-md pointer-events-auto transition-colors ${
+          isLight ? 'bg-white border-slate-200' : 'bg-[#101522] border-white/10'
+        }`}>
           {[
-            { id: 'POWER', label: 'Power', icon: Zap, activeColor: 'text-emerald-400' },
-            { id: 'WATER', label: 'Water', icon: Droplets, activeColor: 'text-cyan-400' },
-            { id: 'TELECOM', label: 'Telecom', icon: Radio, activeColor: 'text-purple-400' },
-            { id: 'HEALTHCARE', label: 'Hospitals', icon: Hospital, activeColor: 'text-amber-400' },
+            { id: 'POWER', label: 'Power', icon: Zap, activeColor: isLight ? 'text-blue-700' : 'text-emerald-400' },
+            { id: 'WATER', label: 'Water', icon: Droplets, activeColor: isLight ? 'text-cyan-700' : 'text-cyan-400' },
+            { id: 'TELECOM', label: 'Telecom', icon: Radio, activeColor: isLight ? 'text-purple-700' : 'text-purple-400' },
+            { id: 'HEALTHCARE', label: 'Hospitals', icon: Hospital, activeColor: isLight ? 'text-emerald-700' : 'text-amber-400' },
           ].map(layer => {
             const Icon = layer.icon;
             const isEnabled = enabledLayers.includes(layer.id);
@@ -430,21 +475,21 @@ export default function TopologyPage() {
                   e.stopPropagation();
                   toggleLayer(layer.id);
                 }}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                   isEnabled 
-                    ? 'bg-white/15 text-white shadow-sm' 
-                    : 'text-gray-500 hover:text-gray-300'
+                    ? (isLight ? 'bg-slate-900 text-white shadow-sm' : 'bg-white/20 text-white shadow-sm') 
+                    : (isLight ? 'text-slate-600 hover:text-slate-900 hover:bg-slate-100' : 'text-gray-400 hover:text-gray-200')
                 }`}
                 title={`Toggle ${layer.label} department network`}
               >
-                <Icon className={`w-3 h-3 ${isEnabled ? layer.activeColor : 'text-gray-500'}`} />
+                <Icon className={`w-3.5 h-3.5 ${isEnabled ? (isLight ? 'text-white' : layer.activeColor) : 'text-slate-400'}`} />
                 <span>{layer.label}</span>
               </button>
             );
           })}
         </div>
 
-        {/* Force Graph 2D with High-Precision Pointer Area & Native Node Click */}
+        {/* Force Graph 2D */}
         <div className="flex-1 w-full h-full flex items-center justify-center relative">
           {graphData.nodes.length > 0 && dimensions.width > 0 ? (
             <ForceGraph2D
@@ -465,42 +510,48 @@ export default function TopologyPage() {
               }}
               linkColor={(link: any) => {
                 if (link.layer === 'INTER_DEPENDENCY') {
-                  return link.is_broken ? 'rgba(239, 68, 68, 0.7)' : 'rgba(255, 255, 255, 0.15)';
+                  return link.is_broken 
+                    ? 'rgba(220, 38, 38, 0.85)' 
+                    : (isLight ? 'rgba(100, 116, 139, 0.35)' : 'rgba(255, 255, 255, 0.15)');
                 }
-                if (link.is_broken || brokenLines.includes(link.line_id)) return 'rgba(239, 68, 68, 0.5)';
-                if (link.risk > 0.85) return '#ef4444';
-                if (link.risk > 0.50) return '#eab308';
-                return '#22c55e';
+                if (link.is_broken || brokenLines.includes(link.line_id)) return 'rgba(220, 38, 38, 0.7)';
+                if (link.risk > 0.85) return '#dc2626';
+                if (link.risk > 0.50) return '#d97706';
+                return isLight ? '#16a34a' : '#22c55e';
               }}
               linkWidth={(link: any) => {
                 if (link.layer === 'INTER_DEPENDENCY') return 1.2;
-                if (link.is_broken || brokenLines.includes(link.line_id)) return 1.8;
+                if (link.is_broken || brokenLines.includes(link.line_id)) return 2.0;
                 if (link.risk > 0.85) return 3.2;
-                if (link.risk > 0.50) return 2.2;
-                return 1.8;
+                if (link.risk > 0.50) return 2.4;
+                return 2.0;
               }}
               linkLineDash={(link: any) => {
                 if (link.layer === 'INTER_DEPENDENCY') return [3, 3];
                 return (link.is_broken || brokenLines.includes(link.line_id) ? [4, 4] : []);
               }}
-              backgroundColor="#0b0e17"
-              cooldownTicks={90}
-              d3VelocityDecay={0.3}
+              backgroundColor={canvasBg}
+              cooldownTicks={100}
+              d3VelocityDecay={0.25}
             />
           ) : (
-            <div className="text-gray-500 font-mono text-xs animate-pulse">Initializing Topology Graph...</div>
+            <div className={`font-mono text-xs animate-pulse ${labelTextClass}`}>Initializing Topology Graph...</div>
           )}
         </div>
 
         {/* Canvas Bottom Legend / Instructions */}
         <div className="absolute bottom-3 left-4 right-4 z-20 flex justify-between items-center pointer-events-none">
-          <div className="flex items-center gap-3 bg-[#101522]/90 backdrop-blur-md border border-white/10 px-3 py-1.5 rounded-xl text-[11px] font-mono text-gray-400 pointer-events-auto">
+          <div className={`flex items-center gap-3 border px-3 py-1.5 rounded-xl text-[11px] font-mono pointer-events-auto shadow-md ${
+            isLight ? 'bg-white border-slate-200 text-slate-800' : 'bg-[#101522] border-white/10 text-gray-400'
+          }`}>
             <span>💡 <strong>Click any node</strong> on graph or select from top dropdown</span>
           </div>
-          <div className="flex items-center gap-2 bg-[#101522]/90 backdrop-blur-md border border-white/10 px-3 py-1.5 rounded-xl text-[11px] font-mono pointer-events-auto">
-            <span className="flex items-center gap-1 text-emerald-400"><span className="w-2 h-2 rounded-full bg-emerald-500" /> Nominal</span>
-            <span className="flex items-center gap-1 text-amber-400"><span className="w-2 h-2 rounded-full bg-amber-500" /> Stressed</span>
-            <span className="flex items-center gap-1 text-red-400"><span className="w-2 h-2 rounded-full bg-red-500" /> Power Failure</span>
+          <div className={`flex items-center gap-2 border px-3 py-1.5 rounded-xl text-[11px] font-mono pointer-events-auto shadow-md ${
+            isLight ? 'bg-white border-slate-200 text-slate-800' : 'bg-[#101522] border-white/10'
+          }`}>
+            <span className="flex items-center gap-1 text-emerald-700 dark:text-emerald-400 font-bold"><span className="w-2.5 h-2.5 rounded-full bg-emerald-600" /> Nominal</span>
+            <span className="flex items-center gap-1 text-amber-700 dark:text-amber-400 font-bold"><span className="w-2.5 h-2.5 rounded-full bg-amber-600" /> Stressed</span>
+            <span className="flex items-center gap-1 text-red-700 dark:text-red-400 font-bold"><span className="w-2.5 h-2.5 rounded-full bg-red-600" /> Power Failure</span>
           </div>
         </div>
       </div>
@@ -511,28 +562,32 @@ export default function TopologyPage() {
       <div className="w-[450px] h-full flex flex-col gap-3 shrink-0 overflow-y-auto pr-1">
 
         {/* --- PANEL 1: SELECTED SUBSTATION VOLTAGE & FAILURE CONTROLLER --- */}
-        <div className="bg-[#101522] border border-cyan-500/20 rounded-2xl p-4 shadow-2xl flex flex-col gap-3 shrink-0">
+        <div className={`rounded-2xl p-4 flex flex-col gap-3 shrink-0 border transition-colors ${cardBgClass}`}>
           
           {/* Header & Status Banner */}
           <div className="flex justify-between items-start">
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="font-extrabold text-white text-sm tracking-wide">
+                <h3 className={`text-base tracking-wide ${headerTextClass}`}>
                   Substation #{selectedBusId + 1}
                 </h3>
-                <span className="text-[10px] font-mono bg-cyan-950/80 text-cyan-300 border border-cyan-800/40 px-2 py-0.5 rounded font-bold">
+                <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
+                  isLight 
+                    ? 'bg-slate-100 text-slate-800 border-slate-300' 
+                    : 'bg-cyan-950/80 text-cyan-300 border-cyan-800/40'
+                }`}>
                   345 kV Bulk Core
                 </span>
               </div>
-              <span className="text-[11px] text-gray-400 font-mono mt-0.5 block">
+              <span className={`text-[11px] font-mono mt-0.5 block ${labelTextClass}`}>
                 Incident Bus ID: {selectedBusId} | New England Grid Hub
               </span>
             </div>
 
             <span className={`text-[10px] font-mono font-bold px-2.5 py-1 rounded-md uppercase tracking-wider ${
               isSelectedSubstationFailed
-                ? 'bg-red-500 text-white shadow-[0_0_12px_rgba(239,68,68,0.5)]'
-                : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                ? 'bg-red-600 text-white shadow-sm'
+                : 'bg-emerald-600 text-white shadow-sm'
             }`}>
               {isSelectedSubstationFailed ? '⚡ POWER FAILURE' : 'ONLINE NOMINAL'}
             </span>
@@ -540,39 +595,51 @@ export default function TopologyPage() {
 
           {/* Voltage & Electrical Telemetry Cards */}
           <div className="grid grid-cols-3 gap-2 text-xs font-mono">
-            <div className="bg-[#141b2c] p-2 rounded-xl border border-white/5 flex flex-col">
-              <span className="text-gray-400 text-[10px]">Bus Voltage</span>
-              <strong className={`text-sm mt-0.5 font-bold ${currentVoltageMult > 1.15 ? 'text-amber-400' : 'text-cyan-400'}`}>
+            <div className={`p-2.5 rounded-xl border flex flex-col ${innerBoxClass}`}>
+              <span className={`text-[10px] font-bold ${labelTextClass}`}>Bus Voltage</span>
+              <strong className={`text-sm mt-0.5 font-black ${
+                currentVoltageMult > 1.15 
+                  ? (isLight ? 'text-amber-700' : 'text-amber-400') 
+                  : (isLight ? 'text-blue-700' : 'text-cyan-400')
+              }`}>
                 {displayVoltageKv} kV
               </strong>
-              <span className="text-[9px] text-gray-500">{currentVoltageMult.toFixed(2)}x Setpoint</span>
+              <span className={`text-[9px] ${labelTextClass}`}>{currentVoltageMult.toFixed(2)}x Setpoint</span>
             </div>
 
-            <div className="bg-[#141b2c] p-2 rounded-xl border border-white/5 flex flex-col">
-              <span className="text-gray-400 text-[10px]">Active Load</span>
-              <strong className="text-white text-sm mt-0.5 font-bold">
+            <div className={`p-2.5 rounded-xl border flex flex-col ${innerBoxClass}`}>
+              <span className={`text-[10px] font-bold ${labelTextClass}`}>Active Load</span>
+              <strong className={`text-sm mt-0.5 font-black ${isLight ? 'text-slate-900' : 'text-white'}`}>
                 {currentSubstationTelemetry.p_mw?.toFixed(1) || '180.0'} MW
               </strong>
-              <span className="text-[9px] text-gray-500">{currentSubstationTelemetry.load_percentage?.toFixed(0) || '54'}% Capacity</span>
+              <span className={`text-[9px] ${labelTextClass}`}>{currentSubstationTelemetry.load_percentage?.toFixed(0) || '54'}% Capacity</span>
             </div>
 
-            <div className="bg-[#141b2c] p-2 rounded-xl border border-white/5 flex flex-col">
-              <span className="text-gray-400 text-[10px]">Cascade Risk</span>
-              <strong className={`text-sm mt-0.5 font-bold ${isSelectedSubstationFailed ? 'text-red-400' : 'text-emerald-400'}`}>
+            <div className={`p-2.5 rounded-xl border flex flex-col ${innerBoxClass}`}>
+              <span className={`text-[10px] font-bold ${labelTextClass}`}>Cascade Risk</span>
+              <strong className={`text-sm mt-0.5 font-black ${
+                isSelectedSubstationFailed 
+                  ? (isLight ? 'text-red-700' : 'text-red-400') 
+                  : (isLight ? 'text-emerald-700' : 'text-emerald-400')
+              }`}>
                 {(((busRisks[selectedBusId] || 0.12)) * 100).toFixed(1)}%
               </strong>
-              <span className="text-[9px] text-gray-500">{isSelectedSubstationFailed ? 'Critical' : 'Stable'}</span>
+              <span className={`text-[9px] font-bold ${isSelectedSubstationFailed ? 'text-red-600' : 'text-emerald-600'}`}>
+                {isSelectedSubstationFailed ? 'Critical Failure' : 'Stable Flow'}
+              </span>
             </div>
           </div>
 
-          {/* VOLTAGE CONTROL SLIDER (As requested: "increase the voltage") */}
-          <div className="bg-[#141b2c] p-3 rounded-xl border border-white/5 flex flex-col gap-2">
+          {/* VOLTAGE CONTROL SLIDER */}
+          <div className={`p-3 rounded-xl border flex flex-col gap-2 ${innerBoxClass}`}>
             <div className="flex justify-between items-center text-xs font-mono">
-              <span className="text-gray-300 font-bold flex items-center gap-1.5">
-                <Gauge className="w-3.5 h-3.5 text-amber-400" />
+              <span className={`font-bold flex items-center gap-1.5 ${isLight ? 'text-slate-900' : 'text-gray-200'}`}>
+                <Gauge className={`w-3.5 h-3.5 ${isLight ? 'text-amber-700' : 'text-amber-400'}`} />
                 Bus Voltage Setpoint:
               </span>
-              <span className="text-amber-400 font-bold text-sm">{displayVoltageKv} kV ({currentVoltageMult.toFixed(2)}x)</span>
+              <span className={`font-black text-sm ${isLight ? 'text-amber-700' : 'text-amber-400'}`}>
+                {displayVoltageKv} kV ({currentVoltageMult.toFixed(2)}x)
+              </span>
             </div>
 
             <input
@@ -582,41 +649,43 @@ export default function TopologyPage() {
               step="0.05"
               value={currentVoltageMult}
               onChange={(e) => handleVoltageChange(selectedBusId, parseFloat(e.target.value))}
-              className="w-full accent-amber-400 h-1.5 bg-[#101522] rounded-lg appearance-none cursor-pointer"
+              className={`w-full h-2 rounded-lg appearance-none cursor-pointer ${
+                isLight ? 'accent-amber-600 bg-slate-300' : 'accent-amber-400 bg-[#101522]'
+              }`}
             />
 
-            <div className="flex justify-between items-center text-[10px] font-mono text-gray-400">
+            <div className="flex justify-between items-center text-[10px] font-mono">
               <button 
                 onClick={() => handleVoltageChange(selectedBusId, 1.0)} 
-                className="hover:text-cyan-400 underline cursor-pointer"
+                className={`font-bold underline cursor-pointer ${isLight ? 'text-blue-700 hover:text-blue-900' : 'text-cyan-400 hover:text-cyan-300'}`}
               >
                 Nominal (345 kV)
               </button>
               <button 
                 onClick={() => handleVoltageChange(selectedBusId, 1.2)} 
-                className="hover:text-amber-400 underline cursor-pointer"
+                className={`font-bold underline cursor-pointer ${isLight ? 'text-amber-700 hover:text-amber-900' : 'text-amber-400 hover:text-amber-300'}`}
               >
                 +20% Surge (414 kV)
               </button>
               <button 
                 onClick={() => handleVoltageChange(selectedBusId, 1.4)} 
-                className="hover:text-red-400 underline cursor-pointer"
+                className={`font-bold underline cursor-pointer ${isLight ? 'text-red-700 hover:text-red-900' : 'text-red-400 hover:text-red-300'}`}
               >
                 +40% Extreme (483 kV)
               </button>
             </div>
           </div>
 
-          {/* POWER FAILURE ACTION BUTTON (As requested: "or make it fail, power failure system") */}
+          {/* POWER FAILURE ACTION BUTTON */}
           <button
             onClick={() => handleToggleSubstationFailure(selectedBusId)}
-            className={`w-full py-3 px-4 rounded-xl text-xs font-extrabold uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg ${
+            className={`w-full py-3 px-4 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md ${
               isSelectedSubstationTripped
-                ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-[0_0_16px_rgba(16,185,129,0.4)]'
-                : 'bg-red-600 hover:bg-red-500 text-white shadow-[0_0_16px_rgba(239,68,68,0.4)] animate-pulse'
+                ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                : 'bg-red-600 hover:bg-red-700 text-white'
             }`}
           >
-            <Zap className="w-4 h-4" />
+            <Zap className="w-4 h-4 fill-white" />
             <span>
               {isSelectedSubstationTripped
                 ? `🔄 Restore Substation #${selectedBusId + 1} Power`
@@ -624,38 +693,38 @@ export default function TopologyPage() {
             </span>
           </button>
 
-          {/* AFFECTED BRANCHES OF THE POWER SYSTEM (As requested) */}
-          <div className="bg-[#141b2c] p-3 rounded-xl border border-white/5 flex flex-col gap-2">
+          {/* AFFECTED BRANCHES OF THE POWER SYSTEM */}
+          <div className={`p-3 rounded-xl border flex flex-col gap-2 ${innerBoxClass}`}>
             <div className="flex justify-between items-center">
-              <span className="text-[11px] font-mono text-gray-300 font-bold uppercase tracking-wider">
+              <span className={`text-[11px] font-mono font-bold uppercase tracking-wider ${isLight ? 'text-slate-900' : 'text-gray-200'}`}>
                 Affected Power Branches ({connectedBranches.length} Corridors):
               </span>
-              <span className="text-[10px] text-gray-500 font-mono">Click to toggle trip</span>
+              <span className={`text-[10px] font-mono ${labelTextClass}`}>Click to toggle</span>
             </div>
 
             <div className="flex flex-col gap-1.5">
               {connectedBranches.map(({ lineId, isTripped, risk }) => (
                 <div 
                   key={`branch-${lineId}`}
-                  className="flex items-center justify-between bg-black/40 px-3 py-1.5 rounded-lg border border-white/5 text-xs font-mono"
+                  className={`flex items-center justify-between px-3 py-2 rounded-lg border text-xs font-mono ${itemBoxClass}`}
                 >
-                  <span className="text-gray-300 font-bold">Line ID #{lineId}</span>
+                  <span className={`font-bold ${isLight ? 'text-slate-900' : 'text-white'}`}>Line ID #{lineId}</span>
                   <div className="flex items-center gap-2">
                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
                       isTripped 
-                        ? 'bg-red-950/80 text-red-400 border border-red-800/60' 
+                        ? 'bg-red-100 text-red-800 border border-red-300 dark:bg-red-950/80 dark:text-red-400 dark:border-red-800' 
                         : risk > 0.85 
-                          ? 'text-red-400 font-bold' 
-                          : 'text-emerald-400'
+                          ? 'text-red-700 font-extrabold' 
+                          : (isLight ? 'text-emerald-700 font-extrabold' : 'text-emerald-400')
                     }`}>
                       {isTripped ? 'SEVERED / POWER FAILURE' : `${(risk * 100).toFixed(0)}% Risk`}
                     </span>
                     <button
                       onClick={() => handleToggleLineTrip(lineId)}
-                      className={`text-[10px] px-2 py-0.5 rounded font-bold cursor-pointer transition-all ${
+                      className={`text-[10px] px-2.5 py-1 rounded font-bold cursor-pointer transition-all shadow-sm ${
                         brokenLines.includes(lineId)
-                          ? 'bg-emerald-600/40 text-emerald-300 hover:bg-emerald-600'
-                          : 'bg-red-600/40 text-red-300 hover:bg-red-600'
+                          ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                          : 'bg-red-600 text-white hover:bg-red-700'
                       }`}
                     >
                       {brokenLines.includes(lineId) ? 'Restore' : 'Trip'}
@@ -666,15 +735,19 @@ export default function TopologyPage() {
             </div>
           </div>
 
-          {/* AFFECTED OTHER DEPARTMENTS: WATER, TELECOM, HEALTHCARE (As requested) */}
-          <div className="bg-[#141b2c] p-3 rounded-xl border border-white/5 flex flex-col gap-2.5">
+          {/* AFFECTED OTHER DEPARTMENTS: WATER, TELECOM, HEALTHCARE */}
+          <div className={`p-3 rounded-xl border flex flex-col gap-2.5 ${innerBoxClass}`}>
             <div className="flex justify-between items-center">
-              <span className="text-[11px] font-mono text-cyan-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
+              <span className={`text-[11px] font-mono font-bold uppercase tracking-wider flex items-center gap-1.5 ${
+                isLight ? 'text-cyan-800' : 'text-cyan-400'
+              }`}>
                 <Activity className="w-3.5 h-3.5" />
                 Cascading Department Failures:
               </span>
               <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded ${
-                isSelectedSubstationFailed ? 'bg-red-500/20 text-red-400' : 'bg-emerald-500/20 text-emerald-400'
+                isSelectedSubstationFailed 
+                  ? 'bg-red-100 text-red-800 border border-red-300 dark:bg-red-500/20 dark:text-red-400' 
+                  : 'bg-emerald-100 text-emerald-800 border border-emerald-300 dark:bg-emerald-500/20 dark:text-emerald-400'
               }`}>
                 {isSelectedSubstationFailed ? 'CRITICAL DISRUPTIONS' : 'CONNECTED / STABLE'}
               </span>
@@ -682,30 +755,30 @@ export default function TopologyPage() {
 
             <div className="flex flex-col gap-2 text-xs font-mono">
               {/* Water Department Impact */}
-              <div className="p-2.5 rounded-lg bg-black/40 border border-white/5 flex flex-col gap-1">
+              <div className={`p-2.5 rounded-lg border flex flex-col gap-1 ${itemBoxClass}`}>
                 <div className="flex justify-between items-center">
-                  <span className="text-cyan-400 font-bold flex items-center gap-1.5">
+                  <span className={`font-bold flex items-center gap-1.5 ${isLight ? 'text-cyan-800' : 'text-cyan-400'}`}>
                     <Droplets className="w-3.5 h-3.5" />
                     Water Infrastructure
                   </span>
-                  <span className={`text-[10px] font-bold ${isSelectedSubstationFailed ? 'text-red-400' : 'text-emerald-400'}`}>
+                  <span className={`text-[10px] font-extrabold ${isSelectedSubstationFailed ? 'text-red-700' : (isLight ? 'text-emerald-700' : 'text-emerald-400')}`}>
                     {isSelectedSubstationFailed ? 'OFFLINE - ZERO FLOW' : 'NOMINAL PRESSURE'}
                   </span>
                 </div>
-                <div className="text-[11px] text-gray-300">
+                <div className="text-[11px]">
                   {connectedDepartmentAssets.water.length > 0 ? (
                     connectedDepartmentAssets.water.map((w, idx) => (
-                      <div key={idx} className="flex justify-between text-[10px] text-gray-400">
-                        <span>• {w.name || `Water Pump Station W_${selectedBusId}`}</span>
-                        <span className={isSelectedSubstationFailed ? 'text-red-400 font-bold' : 'text-cyan-400'}>
+                      <div key={idx} className="flex justify-between text-[10px]">
+                        <span className={labelTextClass}>• {w.name || `Water Pump Station W_${selectedBusId}`}</span>
+                        <span className={`font-bold ${isSelectedSubstationFailed ? 'text-red-700' : (isLight ? 'text-cyan-700' : 'text-cyan-400')}`}>
                           {isSelectedSubstationFailed ? '0 PSI (2,500 GPM Deficit)' : '65 PSI Nominal'}
                         </span>
                       </div>
                     ))
                   ) : (
-                    <div className="text-[10px] text-gray-400 flex justify-between">
-                      <span>• Booster Pump Hub #{selectedBusId + 1}</span>
-                      <span className={isSelectedSubstationFailed ? 'text-red-400 font-bold' : 'text-cyan-400'}>
+                    <div className="text-[10px] flex justify-between">
+                      <span className={labelTextClass}>• Booster Pump Hub #{selectedBusId + 1}</span>
+                      <span className={`font-bold ${isSelectedSubstationFailed ? 'text-red-700' : (isLight ? 'text-cyan-700' : 'text-cyan-400')}`}>
                         {isSelectedSubstationFailed ? 'PUMP TRIPPED (2,500 GPM Lost)' : '65 PSI Nominal'}
                       </span>
                     </div>
@@ -714,30 +787,30 @@ export default function TopologyPage() {
               </div>
 
               {/* Telecommunications Impact */}
-              <div className="p-2.5 rounded-lg bg-black/40 border border-white/5 flex flex-col gap-1">
+              <div className={`p-2.5 rounded-lg border flex flex-col gap-1 ${itemBoxClass}`}>
                 <div className="flex justify-between items-center">
-                  <span className="text-purple-400 font-bold flex items-center gap-1.5">
+                  <span className={`font-bold flex items-center gap-1.5 ${isLight ? 'text-purple-800' : 'text-purple-400'}`}>
                     <Radio className="w-3.5 h-3.5" />
                     Telecommunications Network
                   </span>
-                  <span className={`text-[10px] font-bold ${isSelectedSubstationFailed ? 'text-amber-400' : 'text-emerald-400'}`}>
+                  <span className={`text-[10px] font-extrabold ${isSelectedSubstationFailed ? 'text-amber-700' : (isLight ? 'text-emerald-700' : 'text-emerald-400')}`}>
                     {isSelectedSubstationFailed ? 'GRID FEED CUT - ON BATTERY' : 'ONLINE GRID POWER'}
                   </span>
                 </div>
-                <div className="text-[11px] text-gray-300">
+                <div className="text-[11px]">
                   {connectedDepartmentAssets.telecom.length > 0 ? (
                     connectedDepartmentAssets.telecom.map((t, idx) => (
-                      <div key={idx} className="flex justify-between text-[10px] text-gray-400">
-                        <span>• {t.name || `Cell Tower T_${selectedBusId}`}</span>
-                        <span className={isSelectedSubstationFailed ? 'text-amber-400 font-bold' : 'text-emerald-400'}>
+                      <div key={idx} className="flex justify-between text-[10px]">
+                        <span className={labelTextClass}>• {t.name || `Cell Tower T_${selectedBusId}`}</span>
+                        <span className={`font-bold ${isSelectedSubstationFailed ? 'text-amber-700' : (isLight ? 'text-emerald-700' : 'text-emerald-400')}`}>
                           {isSelectedSubstationFailed ? `${t.hours_remaining || '3.8'}h Battery Remaining` : '100% Grid Power'}
                         </span>
                       </div>
                     ))
                   ) : (
-                    <div className="text-[10px] text-gray-400 flex justify-between">
-                      <span>• Cellular Tower Array #{selectedBusId + 1}</span>
-                      <span className={isSelectedSubstationFailed ? 'text-amber-400 font-bold' : 'text-emerald-400'}>
+                    <div className="text-[10px] flex justify-between">
+                      <span className={labelTextClass}>• Cellular Tower Array #{selectedBusId + 1}</span>
+                      <span className={`font-bold ${isSelectedSubstationFailed ? 'text-amber-700' : (isLight ? 'text-emerald-700' : 'text-emerald-400')}`}>
                         {isSelectedSubstationFailed ? 'Emergency Battery (4.0h left)' : '100% Grid Power'}
                       </span>
                     </div>
@@ -746,19 +819,19 @@ export default function TopologyPage() {
               </div>
 
               {/* Healthcare & Hospitals Impact */}
-              <div className="p-2.5 rounded-lg bg-black/40 border border-white/5 flex flex-col gap-1">
+              <div className={`p-2.5 rounded-lg border flex flex-col gap-1 ${itemBoxClass}`}>
                 <div className="flex justify-between items-center">
-                  <span className="text-emerald-400 font-bold flex items-center gap-1.5">
+                  <span className={`font-bold flex items-center gap-1.5 ${isLight ? 'text-emerald-800' : 'text-emerald-400'}`}>
                     <Hospital className="w-3.5 h-3.5" />
                     Healthcare Facilities
                   </span>
-                  <span className={`text-[10px] font-bold ${isSelectedSubstationFailed ? 'text-amber-400' : 'text-emerald-400'}`}>
+                  <span className={`text-[10px] font-extrabold ${isSelectedSubstationFailed ? 'text-amber-700' : (isLight ? 'text-emerald-700' : 'text-emerald-400')}`}>
                     {isSelectedSubstationFailed ? 'ON DIESEL GENERATORS' : 'NORMAL GRID POWER'}
                   </span>
                 </div>
-                <div className="text-[10px] text-gray-400 flex justify-between">
-                  <span>• Metro Regional Hospital #{selectedBusId + 1}</span>
-                  <span className={isSelectedSubstationFailed ? 'text-amber-400 font-bold' : 'text-emerald-400'}>
+                <div className="text-[10px] flex justify-between">
+                  <span className={labelTextClass}>• Metro Regional Hospital #{selectedBusId + 1}</span>
+                  <span className={`font-bold ${isSelectedSubstationFailed ? 'text-amber-700' : (isLight ? 'text-emerald-700' : 'text-emerald-400')}`}>
                     {isSelectedSubstationFailed ? 'Gen Fuel: 68h | 8 ICU Beds Alert' : 'Normal Grid Feed'}
                   </span>
                 </div>
@@ -768,10 +841,10 @@ export default function TopologyPage() {
         </div>
 
         {/* --- PANEL 2: GLOBAL LOAD & TRIGGERED OUTAGES --- */}
-        <div className="bg-[#101522] border border-white/10 rounded-2xl p-4 shadow-xl flex flex-col gap-3 shrink-0">
+        <div className={`rounded-2xl p-4 flex flex-col gap-3 shrink-0 border transition-colors ${cardBgClass}`}>
           <div className="flex justify-between items-center">
-            <span className="font-bold text-gray-200 text-xs">Global Heatwave Demand</span>
-            <span className="text-amber-400 font-bold font-mono text-sm">{multiplier.toFixed(2)}x</span>
+            <span className={`text-xs font-bold ${isLight ? 'text-slate-900' : 'text-gray-200'}`}>Global Heatwave Demand</span>
+            <span className={`font-black font-mono text-sm ${isLight ? 'text-amber-700' : 'text-amber-400'}`}>{multiplier.toFixed(2)}x</span>
           </div>
 
           <input
@@ -781,26 +854,32 @@ export default function TopologyPage() {
             step="0.05"
             value={multiplier}
             onChange={(e) => setMultiplier(parseFloat(e.target.value))}
-            className="w-full accent-amber-400 h-1.5 bg-[#1a2130] rounded-lg appearance-none cursor-pointer"
+            className={`w-full h-2 rounded-lg appearance-none cursor-pointer ${
+              isLight ? 'accent-amber-600 bg-slate-200' : 'accent-amber-400 bg-[#1a2130]'
+            }`}
           />
 
-          <div className="flex justify-between items-center pt-2 border-t border-white/5">
-            <span className="text-xs font-bold text-white uppercase tracking-wider">
+          <div className="flex justify-between items-center pt-2 border-t border-slate-200 dark:border-white/5">
+            <span className={`text-xs font-bold uppercase tracking-wider ${headerTextClass}`}>
               Active Outages ({brokenLines.length + trippedBuses.length})
             </span>
             <div className="flex items-center gap-2">
               <button
                 onClick={forceTripRandomBranch}
-                className="px-2.5 py-1 rounded-lg bg-red-950/80 border border-red-500/40 text-red-300 font-mono text-xs font-bold hover:bg-red-900 cursor-pointer"
+                className="px-3 py-1.5 rounded-lg bg-red-600 text-white font-mono text-xs font-bold hover:bg-red-700 cursor-pointer shadow-sm"
               >
                 + Trip Random Line
               </button>
               {(brokenLines.length > 0 || trippedBuses.length > 0) && (
                 <button
                   onClick={handleReset}
-                  className="px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 text-gray-300 font-mono text-xs font-bold hover:text-white cursor-pointer"
+                  className={`px-3 py-1.5 rounded-lg border font-mono text-xs font-bold cursor-pointer shadow-sm ${
+                    isLight 
+                      ? 'bg-slate-100 border-slate-300 text-slate-800 hover:bg-slate-200' 
+                      : 'bg-white/5 border-white/10 text-gray-300 hover:text-white'
+                  }`}
                 >
-                  <RotateCcw className="w-3 h-3 inline mr-1" />
+                  <RotateCcw className="w-3.5 h-3.5 inline mr-1" />
                   Reset
                 </button>
               )}
@@ -809,79 +888,83 @@ export default function TopologyPage() {
         </div>
 
         {/* --- PANEL 3: CASCADE PROBABILITY & AT-RISK BRANCHES --- */}
-        <div className="bg-[#101522] border border-white/10 rounded-2xl p-4 shadow-xl flex flex-col gap-3 shrink-0">
+        <div className={`rounded-2xl p-4 flex flex-col gap-3 shrink-0 border transition-colors ${cardBgClass}`}>
           <div className="flex justify-between items-center">
-            <h3 className="font-bold text-white text-xs uppercase tracking-wider">Cascade Probability</h3>
-            <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider ${
+            <h3 className={`text-xs uppercase tracking-wider ${headerTextClass}`}>Cascade Probability</h3>
+            <span className={`text-[10px] font-bold px-2.5 py-1 rounded uppercase tracking-wider ${
               maxRisk > 0.85
-                ? 'bg-[#ff334b] text-white shadow-[0_0_10px_rgba(255,51,75,0.4)]'
-                : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                ? 'bg-red-600 text-white shadow-sm'
+                : 'bg-emerald-600 text-white shadow-sm'
             }`}>
               {maxRisk > 0.85 ? 'CRITICAL ALERT' : 'NOMINAL'}
             </span>
           </div>
 
-          <div className="flex items-center justify-between bg-[#141b2c] p-2.5 rounded-xl border border-white/5">
+          <div className={`p-3 rounded-xl border flex items-center justify-between ${innerBoxClass}`}>
             <div>
-              <span className="text-3xl font-extrabold text-white font-mono tracking-tight block">
+              <span className={`text-3xl font-black font-mono tracking-tight block ${headerTextClass}`}>
                 {(maxRisk * 100).toFixed(1)}%
               </span>
-              <span className="text-[10px] text-gray-400 font-mono uppercase tracking-wider block mt-0.5">
+              <span className={`text-[10px] font-mono uppercase tracking-wider block mt-0.5 ${labelTextClass}`}>
                 MAX AI PREDICTION RISK
               </span>
             </div>
-            <div className="w-11 h-11 rounded-full border-2 border-red-500/40 bg-red-950/20 flex items-center justify-center shadow-[0_0_12px_rgba(239,68,68,0.25)]">
-              <AlertTriangle className="w-5 h-5 text-red-400" />
+            <div className="w-12 h-12 rounded-full border-2 border-red-500 bg-red-100 dark:bg-red-950/40 flex items-center justify-center shadow-sm">
+              <AlertTriangle className="w-6 h-6 text-red-600" />
             </div>
           </div>
 
           {/* Breakdown Counts */}
-          <div className="grid grid-cols-3 gap-2 text-center font-mono p-1.5 bg-[#141b2c] rounded-xl border border-white/5">
+          <div className={`grid grid-cols-3 gap-2 text-center font-mono p-2 rounded-xl border ${innerBoxClass}`}>
             <div>
-              <span className="text-red-400 font-bold text-xs block">{criticalCount}</span>
-              <span className="text-[9px] text-gray-500 uppercase">CRITICAL</span>
+              <span className={`font-black text-sm block ${isLight ? 'text-red-700' : 'text-red-400'}`}>{criticalCount}</span>
+              <span className={`text-[9px] uppercase font-bold ${labelTextClass}`}>CRITICAL</span>
             </div>
-            <div className="border-x border-white/10">
-              <span className="text-amber-400 font-bold text-xs block">{warningCount}</span>
-              <span className="text-[9px] text-gray-500 uppercase">WARNING</span>
+            <div className="border-x border-slate-200 dark:border-white/10">
+              <span className={`font-black text-sm block ${isLight ? 'text-amber-700' : 'text-amber-400'}`}>{warningCount}</span>
+              <span className={`text-[9px] uppercase font-bold ${labelTextClass}`}>WARNING</span>
             </div>
             <div>
-              <span className="text-emerald-400 font-bold text-xs block">{nominalCount}</span>
-              <span className="text-[9px] text-gray-500 uppercase">NOMINAL</span>
+              <span className={`font-black text-sm block ${isLight ? 'text-emerald-700' : 'text-emerald-400'}`}>{nominalCount}</span>
+              <span className={`text-[9px] uppercase font-bold ${labelTextClass}`}>NOMINAL</span>
             </div>
           </div>
 
           {/* System-wide Cross-Sector Impact Quick Counts */}
-          <div className="grid grid-cols-3 gap-1.5 text-center font-mono text-[10px] p-1.5 bg-[#141b2c] rounded-xl border border-white/5">
+          <div className={`grid grid-cols-3 gap-1.5 text-center font-mono text-[10px] p-2 rounded-xl border ${innerBoxClass}`}>
             <div>
-              <span className="text-cyan-400 font-bold block">{summary.water_pumps_tripped}</span>
-              <span className="text-[8px] text-gray-500">Pumps Down</span>
+              <span className={`font-bold block ${isLight ? 'text-cyan-800' : 'text-cyan-400'}`}>{summary.water_pumps_tripped}</span>
+              <span className={`text-[8px] ${labelTextClass}`}>Pumps Down</span>
             </div>
-            <div className="border-x border-white/10">
-              <span className="text-purple-400 font-bold block">{summary.cell_towers_on_battery}</span>
-              <span className="text-[8px] text-gray-500">Towers Battery</span>
+            <div className="border-x border-slate-200 dark:border-white/10">
+              <span className={`font-bold block ${isLight ? 'text-purple-800' : 'text-purple-400'}`}>{summary.cell_towers_on_battery}</span>
+              <span className={`text-[8px] ${labelTextClass}`}>Towers Battery</span>
             </div>
             <div>
-              <span className="text-emerald-400 font-bold block">{summary.hospitals_on_generator}</span>
-              <span className="text-[8px] text-gray-500">Hosp on Gen</span>
+              <span className={`font-bold block ${isLight ? 'text-emerald-800' : 'text-emerald-400'}`}>{summary.hospitals_on_generator}</span>
+              <span className={`text-[8px] ${labelTextClass}`}>Hosp on Gen</span>
             </div>
           </div>
 
           {/* Top At-Risk Transmission Corridors */}
           <div className="flex flex-col gap-2 pt-1">
-            <span className="text-[10px] font-mono text-gray-400 uppercase tracking-wider">Top At-Risk Transmission Lines:</span>
+            <span className={`text-[10px] font-mono uppercase tracking-wider font-bold ${labelTextClass}`}>Top At-Risk Transmission Lines:</span>
             {topRiskBranches.map(({ id: lineId, risk }) => (
               <div key={`risk-${lineId}`} className="flex flex-col gap-0.5">
                 <div className="flex justify-between font-mono text-xs">
-                  <span className="text-gray-300">Line #{lineId}</span>
-                  <span className={`font-bold ${risk > 0.85 ? 'text-red-400' : 'text-amber-400'}`}>
+                  <span className={`font-bold ${isLight ? 'text-slate-800' : 'text-gray-300'}`}>Line #{lineId}</span>
+                  <span className={`font-black ${
+                    risk > 0.85 
+                      ? (isLight ? 'text-red-700' : 'text-red-400') 
+                      : (isLight ? 'text-amber-700' : 'text-amber-400')
+                  }`}>
                     {(risk * 100).toFixed(1)}% Risk
                   </span>
                 </div>
-                <div className="w-full h-1.5 bg-black/50 rounded-full overflow-hidden">
+                <div className="w-full h-2 bg-slate-200 dark:bg-black/50 rounded-full overflow-hidden">
                   <div
                     className={`h-full rounded-full transition-all duration-500 ${
-                      risk > 0.85 ? 'bg-red-500' : 'bg-amber-400'
+                      risk > 0.85 ? 'bg-red-600' : 'bg-amber-500'
                     }`}
                     style={{ width: `${Math.min(100, Math.max(10, risk * 100))}%` }}
                   />

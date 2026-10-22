@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -16,57 +16,38 @@
   }
 
   :root {
-    --grid-bg: #07080b;
-    --grid-bg-alt: #12141c;
-    --grid-panel: #1b1d27;
-    --grid-panel-alt: #161821;
+    --grid-bg: #07090e;
+    --grid-bg-header: #0a0d14;
+    --grid-canvas-bg: #0b0e17;
+    --grid-card-bg: #101522;
+    --grid-box-bg: #141b2c;
+    --grid-subbox-bg: #070a12;
+    --grid-border: rgba(255, 255, 255, 0.12);
+    --grid-border-subtle: rgba(255, 255, 255, 0.06);
     --grid-text: #ffffff;
-    --grid-text-muted: #d1d5db;
-    --grid-text-dim: #9ca3af;
-    --grid-inverse: #000000;
-    --grid-border: rgba(255,255,255,0.05);
+    --grid-text-muted: #cbd5e1;
+    --grid-text-dim: #94a3b8;
   }
 
-  body.light-theme {
-    --grid-bg: #f3f4f6;
-    --grid-bg-alt: #ffffff;
-    --grid-panel: #ffffff;
-    --grid-panel-alt: #f9fafb;
-    --grid-text: #111827;
-    --grid-text-muted: #374151;
-    --grid-text-dim: #6b7280;
-    --grid-inverse: #ffffff;
-    --grid-border: rgba(0,0,0,0.1);
+  body.light-theme, html.light-theme {
+    --grid-bg: #f1f5f9;
+    --grid-bg-header: #ffffff;
+    --grid-canvas-bg: #ffffff;
+    --grid-card-bg: #ffffff;
+    --grid-box-bg: #f8fafc;
+    --grid-subbox-bg: #f1f5f9;
+    --grid-border: #cbd5e1;
+    --grid-border-subtle: #e2e8f0;
+    --grid-text: #0f172a;
+    --grid-text-muted: #334155;
+    --grid-text-dim: #64748b;
   }
 
   body {
     background-color: var(--grid-bg);
     color: var(--grid-text-muted);
     @apply font-sans antialiased;
-    transition: background-color 0.3s ease, color 0.3s ease;
-  }
-}
-
-@layer components {
-  .panel {
-    @apply bg-grid-panel rounded-xl border border-grid-border p-4 shadow-lg;
-  }
-
-  .glass-panel {
-    @apply bg-grid-panel/80 backdrop-blur-md border border-grid-border rounded-xl p-4;
-  }
-
-  .badge {
-    @apply px-2 py-0.5 rounded text-xs font-mono font-bold tracking-wider;
-  }
-  .badge-nominal {
-    @apply bg-grid-nominal/20 text-grid-nominal border border-grid-nominal/50;
-  }
-  .badge-warning {
-    @apply bg-grid-warning/20 text-grid-warning border border-grid-warning/50;
-  }
-  .badge-danger {
-    @apply bg-grid-danger/20 text-grid-danger border border-grid-danger/50;
+    transition: background-color 0.2s ease, color 0.2s ease;
   }
 }
 
@@ -79,8 +60,9 @@
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  @apply bg-grid-border rounded-full;
+  background: var(--grid-border);
+  border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  @apply bg-gray-600;
+  background: var(--grid-text-dim);
 }

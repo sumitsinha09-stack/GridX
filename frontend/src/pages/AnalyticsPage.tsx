@@ -1,25 +1,13 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Activity, Database, ShieldAlert, Clock } from 'lucide-react';
+import { Database, ShieldAlert, Clock } from 'lucide-react';
 import { 
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Legend
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
 } from 'recharts';
-
-const trainingData = [
-  { epoch: 0, f1Score: 45.2 },
-  { epoch: 5, f1Score: 58.4 },
-  { epoch: 10, f1Score: 68.4 },
-  { epoch: 15, f1Score: 74.2 },
-  { epoch: 20, f1Score: 79.1 },
-  { epoch: 25, f1Score: 81.3 },
-  { epoch: 30, f1Score: 82.5 },
-  { epoch: 35, f1Score: 83.9 },
-  { epoch: 40, f1Score: 84.7 },
-  { epoch: 45, f1Score: 85.2 },
-  { epoch: 50, f1Score: 85.8 },
-];
+import { useTheme } from '../context/ThemeContext';
 
 export default function AnalyticsPage() {
+  const { isLight } = useTheme();
   const [rankings, setRankings] = useState<any[]>([]);
   const [timeline, setTimeline] = useState<any[]>([]);
 
@@ -46,77 +34,97 @@ export default function AnalyticsPage() {
   }, []);
 
   return (
-    <div className="h-full w-full p-8 bg-grid-bg text-grid-text-muted overflow-y-auto space-y-8">
+    <div className={`h-full w-full p-8 overflow-y-auto space-y-8 transition-colors duration-200 ${
+      isLight ? 'bg-[#f1f5f9] text-slate-900' : 'bg-grid-bg text-grid-text-muted'
+    }`}>
       
       {/* Page Header */}
       <div>
-        <h1 className="text-2xl font-bold text-grid-text mb-2 flex items-center gap-2">
-          <Database className="text-grid-accent" /> Apache Spark Multi-Infrastructure Analytics
+        <h1 className={`text-2xl font-extrabold mb-2 flex items-center gap-2 ${
+          isLight ? 'text-slate-900' : 'text-white'
+        }`}>
+          <Database className="text-cyan-600 dark:text-cyan-400" /> Apache Spark Multi-Infrastructure Analytics
         </h1>
-        <p className="text-sm text-grid-text-muted">
+        <p className={`text-sm ${isLight ? 'text-slate-600' : 'text-gray-400'}`}>
           Distributed contingency simulation results, cross-sector vulnerability matrices, and PyTorch GNN convergence.
         </p>
       </div>
 
       {/* Row 1: Spark Multi-Infrastructure Temporal Cascade Decay Chart */}
-      <div className="panel p-6 border border-grid-border bg-grid-panel rounded-xl shadow-lg">
+      <div className={`p-6 border rounded-xl shadow-sm ${
+        isLight ? 'bg-white border-slate-200 text-slate-900' : 'bg-[#101522] border-white/10 text-white'
+      }`}>
         <div className="flex justify-between items-start mb-4">
           <div>
             <div className="flex items-center gap-2">
-              <Clock className="w-4 h-4 text-grid-warning" />
-              <h2 className="text-lg font-bold text-grid-text">Multi-Sector Cascade Horizon Decay Profile</h2>
+              <Clock className="w-4 h-4 text-amber-500" />
+              <h2 className={`text-lg font-extrabold ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                Multi-Sector Cascade Horizon Decay Profile
+              </h2>
             </div>
-            <p className="text-sm text-grid-text-muted mt-1">
+            <p className={`text-sm mt-1 ${isLight ? 'text-slate-600' : 'text-gray-400'}`}>
               PySpark Monte Carlo simulations (250 runs) tracking average component degradation from shock to 72 hours.
             </p>
           </div>
-          <span className="text-xs font-mono bg-grid-accent/10 text-grid-accent px-2 py-1 rounded border border-grid-accent/20">
+          <span className={`text-xs font-mono font-bold px-2 py-1 rounded border ${
+            isLight ? 'bg-cyan-100 text-cyan-800 border-cyan-300' : 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20'
+          }`}>
             Apache Spark RDD Parallelized
           </span>
         </div>
 
-        <div className="w-full h-80 bg-grid-bg-alt rounded-lg border border-grid-border p-4">
+        <div className={`w-full h-80 rounded-lg border p-4 ${
+          isLight ? 'bg-slate-50 border-slate-200' : 'bg-[#0b0e17] border-white/5'
+        }`}>
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={timeline} margin={{ top: 10, right: 30, left: 0, bottom: 10 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#2d303a" vertical={false} />
+              <CartesianGrid strokeDasharray="3 3" stroke={isLight ? '#cbd5e1' : '#2d303a'} vertical={false} />
               <XAxis 
                 dataKey="time_horizon_hours" 
-                stroke="#9ca3af"
+                stroke={isLight ? '#334155' : '#9ca3af'}
                 tickFormatter={(val) => `${val}h`}
-                label={{ value: 'Cascade Horizon (Hours)', position: 'insideBottom', offset: -5, fill: '#6b7280', fontSize: 11 }}
+                label={{ value: 'Cascade Horizon (Hours)', position: 'insideBottom', offset: -5, fill: isLight ? '#475569' : '#6b7280', fontSize: 11 }}
               />
-              <YAxis stroke="#9ca3af" />
+              <YAxis stroke={isLight ? '#334155' : '#9ca3af'} />
               <Tooltip 
-                contentStyle={{ backgroundColor: '#181920', borderColor: '#374151', borderRadius: '8px' }}
-                labelStyle={{ color: '#f3f4f6', fontWeight: 'bold' }}
+                contentStyle={isLight 
+                  ? { backgroundColor: '#ffffff', borderColor: '#cbd5e1', color: '#0f172a', borderRadius: '8px', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' } 
+                  : { backgroundColor: '#181920', borderColor: '#374151', borderRadius: '8px' }}
+                labelStyle={{ color: isLight ? '#0f172a' : '#f3f4f6', fontWeight: 'bold' }}
               />
               <Legend verticalAlign="top" height={36} />
-              <Line type="monotone" dataKey="power_buses_offline" name="Power Buses Down" stroke="#3b82f6" strokeWidth={2} dot={{ r: 4 }} />
-              <Line type="monotone" dataKey="water_pumps_tripped" name="Water Pumps Down (0h)" stroke="#06b6d4" strokeWidth={2} dot={{ r: 4 }} />
-              <Line type="monotone" dataKey="cell_towers_offline" name="Cell Towers Depleted (4h-8h)" stroke="#a855f7" strokeWidth={2} dot={{ r: 4 }} />
-              <Line type="monotone" dataKey="hospitals_critical" name="Hospitals Critical (72h Fuel Drop)" stroke="#ef4444" strokeWidth={3} dot={{ r: 5 }} />
+              <Line type="monotone" dataKey="power_buses_offline" name="Power Buses Down" stroke="#2563eb" strokeWidth={2.5} dot={{ r: 4 }} />
+              <Line type="monotone" dataKey="water_pumps_tripped" name="Water Pumps Down (0h)" stroke="#0891b2" strokeWidth={2.5} dot={{ r: 4 }} />
+              <Line type="monotone" dataKey="cell_towers_offline" name="Cell Towers Depleted (4h-8h)" stroke="#7c3aed" strokeWidth={2.5} dot={{ r: 4 }} />
+              <Line type="monotone" dataKey="hospitals_critical" name="Hospitals Critical (72h Fuel Drop)" stroke="#dc2626" strokeWidth={3} dot={{ r: 5 }} />
             </LineChart>
           </ResponsiveContainer>
         </div>
       </div>
 
       {/* Row 2: Spark SQL Critical Substation Rankings Table */}
-      <div className="panel p-6 border border-grid-border bg-grid-panel rounded-xl shadow-lg">
+      <div className={`p-6 border rounded-xl shadow-sm ${
+        isLight ? 'bg-white border-slate-200 text-slate-900' : 'bg-[#101522] border-white/10 text-white'
+      }`}>
         <div className="flex justify-between items-center mb-4">
           <div>
-            <h2 className="text-lg font-bold text-grid-text flex items-center gap-2">
-              <ShieldAlert className="w-5 h-5 text-grid-danger" /> Critical Substation Vulnerability Matrix
+            <h2 className={`text-lg font-extrabold flex items-center gap-2 ${isLight ? 'text-slate-900' : 'text-white'}`}>
+              <ShieldAlert className="w-5 h-5 text-red-600 dark:text-red-400" /> Critical Substation Vulnerability Matrix
             </h2>
-            <p className="text-sm text-grid-text-muted mt-1">
+            <p className={`text-sm mt-1 ${isLight ? 'text-slate-600' : 'text-gray-400'}`}>
               Substations ranked by secondary impact potential computed via PySpark Broadcast Spatial Joins & Spark SQL.
             </p>
           </div>
-          <span className="text-xs font-mono text-grid-text-dim">Source: critical_substation_rankings.parquet</span>
+          <span className={`text-xs font-mono font-bold ${isLight ? 'text-slate-500' : 'text-gray-400'}`}>
+            Source: critical_substation_rankings.parquet
+          </span>
         </div>
 
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm font-mono">
-            <thead className="bg-grid-bg-alt text-grid-text-dim uppercase text-[10px] tracking-wider border-b border-grid-border">
+            <thead className={`uppercase text-[10px] tracking-wider border-b font-bold ${
+              isLight ? 'bg-slate-100 text-slate-700 border-slate-200' : 'bg-[#0b0e17] text-gray-400 border-white/10'
+            }`}>
               <tr>
                 <th className="py-3 px-4">Bus ID</th>
                 <th className="py-3 px-4">Substation Name</th>
@@ -126,50 +134,19 @@ export default function AnalyticsPage() {
                 <th className="py-3 px-4 text-center">Dependent Water Pumps</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-grid-border/40">
+            <tbody className={`divide-y ${isLight ? 'divide-slate-200' : 'divide-white/5'}`}>
               {rankings.slice(0, 8).map((row, idx) => (
-                <tr key={idx} className="hover:bg-grid-bg-alt/50 transition-colors">
-                  <td className="py-3 px-4 font-bold text-blue-400">P_{row.bus_id}</td>
-                  <td className="py-3 px-4 font-sans text-grid-text font-medium">{row.substation_name}</td>
-                  <td className="py-3 px-4 text-center text-emerald-400 font-bold">{row.dependent_hospitals}</td>
-                  <td className="py-3 px-4 text-center font-bold text-red-400">{row.icu_beds_at_risk}</td>
-                  <td className="py-3 px-4 text-center text-purple-400">{row.dependent_cell_towers}</td>
-                  <td className="py-3 px-4 text-center text-cyan-400">{row.dependent_water_pumps}</td>
+                <tr key={idx} className={`transition-colors ${isLight ? 'hover:bg-slate-50 text-slate-800' : 'hover:bg-white/5 text-gray-300'}`}>
+                  <td className="py-3 px-4 font-bold text-blue-600 dark:text-blue-400">P_{row.bus_id}</td>
+                  <td className={`py-3 px-4 font-sans font-medium ${isLight ? 'text-slate-900' : 'text-white'}`}>{row.substation_name}</td>
+                  <td className="py-3 px-4 text-center text-emerald-600 dark:text-emerald-400 font-bold">{row.dependent_hospitals}</td>
+                  <td className="py-3 px-4 text-center font-bold text-red-600 dark:text-red-400">{row.icu_beds_at_risk}</td>
+                  <td className="py-3 px-4 text-center text-purple-600 dark:text-purple-400 font-bold">{row.dependent_cell_towers}</td>
+                  <td className="py-3 px-4 text-center text-cyan-600 dark:text-cyan-400 font-bold">{row.dependent_water_pumps}</td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
-      </div>
-
-      {/* Row 3: PyTorch GAT Convergence */}
-      <div className="panel p-6 border border-grid-border bg-grid-panel rounded-xl shadow-lg">
-        <div className="flex justify-between items-start mb-4">
-          <div>
-            <h2 className="text-lg font-bold text-grid-text flex items-center gap-2">
-              <Activity className="w-5 h-5 text-grid-nominal" /> GAT Neural Network Convergence Benchmark
-            </h2>
-            <p className="text-sm text-grid-text-muted mt-1">
-              F1 Accuracy score convergence across 50 epochs on IEEE 39-bus power flow contingencies.
-            </p>
-          </div>
-          <div className="flex flex-col items-end">
-            <span className="text-3xl font-black text-grid-nominal">85.8<span className="text-lg text-grid-text-dim">%</span></span>
-            <span className="text-[10px] text-grid-text-dim font-mono uppercase">Target Accuracy</span>
-          </div>
-        </div>
-
-        <div className="w-full h-64 bg-grid-bg-alt rounded-lg border border-grid-border p-4">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={trainingData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#2d303a" vertical={false} />
-              <XAxis dataKey="epoch" stroke="#9ca3af" />
-              <YAxis domain={[40, 100]} stroke="#9ca3af" tickFormatter={(v) => `${v}%`} />
-              <Tooltip contentStyle={{ backgroundColor: '#181920', borderColor: '#374151' }} />
-              <ReferenceLine y={85.8} stroke="#22c55e" strokeDasharray="3 3" label={{ value: 'Target F1 (85.8%)', fill: '#22c55e', fontSize: 10 }} />
-              <Line type="monotone" dataKey="f1Score" name="F1 Score" stroke="#00cce6" strokeWidth={2.5} dot={{ r: 3 }} />
-            </LineChart>
-          </ResponsiveContainer>
         </div>
       </div>
 
