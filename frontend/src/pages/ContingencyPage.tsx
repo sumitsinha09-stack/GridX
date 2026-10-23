@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
 import { Zap, Flame, ShieldAlert, RotateCcw } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
@@ -10,25 +10,35 @@ export default function ContingencyPage() {
   const [predictions, setPredictions] = useState<Record<number, number>>({});
   const [summary, setSummary] = useState<any>(null);
 
-  const runContingencyTest = async () => {
+  const abortRef = useRef<AbortController | null>(null);
+
+  const runContingencyTest = useCallback(async (lines: number[], mult: number) => {
+    if (abortRef.current) abortRef.current.abort();
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+
     try {
       const res = await axios.post('http://localhost:8000/api/hetero/simulate', {
-        broken_lines: brokenLines,
-        demand_multiplier: multiplier,
+        broken_lines: lines,
+        demand_multiplier: mult,
         time_horizon_hours: 24.0,
         enabled_layers: ['POWER', 'WATER', 'TELECOM', 'HEALTHCARE']
-      });
+      }, { signal: ctrl.signal });
 
       setSummary(res.data.summary);
       setPredictions(res.data.power_predictions || {});
-    } catch (err) {
+    } catch (err: any) {
+      if (axios.isCancel(err) || err.name === 'CanceledError') return;
       console.error("Failed to run contingency test:", err);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    runContingencyTest();
-  }, [multiplier, brokenLines]);
+    const t = setTimeout(() => {
+      runContingencyTest(brokenLines, multiplier);
+    }, 120);
+    return () => clearTimeout(t);
+  }, [multiplier, brokenLines, runContingencyTest]);
 
   const toggleLine = (lineId: number) => {
     setBrokenLines(prev => 

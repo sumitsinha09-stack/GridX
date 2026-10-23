@@ -61,25 +61,25 @@ function DashboardLayout() {
       animate={{ opacity: 1 }}
       transition={{ duration: 0.1 }}
     >
-      {/* Dynamic Ambient Background Glows */}
+      {/* Dynamic Ambient Background Glows optimized for Safari & Chrome GPU rendering */}
       {!isLight && (
-        <div className="fixed inset-0 pointer-events-none z-0">
+        <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden transform-gpu">
           <div 
-            className="absolute -top-[15%] right-[10%] w-[600px] h-[600px] rounded-full blur-[160px] opacity-20"
-            style={{ background: 'radial-gradient(circle, #8B5CF6 0%, #EC4899 50%, transparent 70%)' }}
+            className="absolute -top-[15%] right-[10%] w-[600px] h-[600px] rounded-full opacity-20 pointer-events-none"
+            style={{ background: 'radial-gradient(circle, #8B5CF6 0%, #EC4899 40%, transparent 70%)' }}
           />
           <div 
-            className="absolute bottom-[-10%] left-[-5%] w-[550px] h-[550px] rounded-full blur-[170px] opacity-15"
-            style={{ background: 'radial-gradient(circle, #F59E0B 0%, #E11D48 60%, transparent 75%)' }}
+            className="absolute bottom-[-10%] left-[-5%] w-[550px] h-[550px] rounded-full opacity-15 pointer-events-none"
+            style={{ background: 'radial-gradient(circle, #F59E0B 0%, #E11D48 40%, transparent 75%)' }}
           />
         </div>
       )}
 
       {/* Top Telemetry Header */}
-      <header className={`h-14 border-b flex items-center justify-between px-6 shrink-0 z-40 select-none backdrop-blur-md transition-colors duration-200 ${
+      <header className={`h-14 border-b flex items-center justify-between px-6 shrink-0 z-40 select-none transition-colors duration-200 ${
         isLight 
-          ? 'bg-white/90 border-slate-200 shadow-sm' 
-          : 'bg-[#0f091c]/90 border-white/10'
+          ? 'bg-white border-slate-200 shadow-sm' 
+          : 'bg-[#0f091c] border-white/10'
       }`}>
         
         {/* Left: Brand / Logo */}

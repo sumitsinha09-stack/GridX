@@ -91,10 +91,25 @@ class HeteroSimulationRequest(BaseModel):
     time_horizon_hours: float = 4.0
     enabled_layers: List[str] = ["POWER", "WATER", "TELECOM", "HEALTHCARE", "TRANSPORTATION"]
 
+_HETERO_CACHE: Dict[Any, Any] = {}
+
 @app.post("/api/hetero/simulate")
 async def simulate_hetero(req: HeteroSimulationRequest):
     if not hetero_engine:
         return {"error": "Multi-Infrastructure engine not loaded."}
+
+    # Generate cache key
+    cache_key = (
+        tuple(sorted(req.broken_lines)),
+        tuple(sorted(req.tripped_buses)),
+        round(req.demand_multiplier, 3),
+        tuple(sorted((int(k), round(float(v), 3)) for k, v in req.node_multipliers.items())),
+        round(req.time_horizon_hours, 2),
+        tuple(sorted(req.enabled_layers))
+    )
+
+    if cache_key in _HETERO_CACHE:
+        return _HETERO_CACHE[cache_key]
 
     results = hetero_engine.simulate_multisector_cascade(
         broken_lines=req.broken_lines,
@@ -242,7 +257,7 @@ async def simulate_hetero(req: HeteroSimulationRequest):
                     "is_broken": True
                 })
 
-    return {
+    response_data = {
         "summary": results["summary"],
         "power_predictions": results["power_predictions"],
         "bus_risks": results["bus_risks"],
@@ -256,6 +271,12 @@ async def simulate_hetero(req: HeteroSimulationRequest):
             "links": links
         }
     }
+
+    if len(_HETERO_CACHE) > 200:
+        _HETERO_CACHE.pop(next(iter(_HETERO_CACHE)))
+    _HETERO_CACHE[cache_key] = response_data
+
+    return response_data
 
 # ==============================================================================
 # 3. SPARK SQL ANALYTICS ENDPOINTS

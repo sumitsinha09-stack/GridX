@@ -97,6 +97,8 @@ export default function LandingPage() {
   const [isExploded, setIsExploded] = useState<boolean>(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  const rectRef = useRef<{ left: number; top: number; width: number; height: number } | null>(null);
+
   // Mouse tilt physics using Framer Motion
   const mouseX = useMotionValue(0);
   const mouseY = useMotionValue(0);
@@ -109,16 +111,29 @@ export default function LandingPage() {
   const rotateZ = useTransform(smoothX, [-0.5, 0.5], [-42, -34]);
   const rotateY = useTransform(smoothX, [-0.5, 0.5], [-6, 6]);
 
+  const handleMouseEnter = () => {
+    if (containerRef.current) {
+      const domRect = containerRef.current.getBoundingClientRect();
+      rectRef.current = { left: domRect.left, top: domRect.top, width: domRect.width, height: domRect.height };
+    }
+  };
+
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!containerRef.current) return;
-    const rect = containerRef.current.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / rect.width - 0.5;
-    const y = (e.clientY - rect.top) / rect.height - 0.5;
+    let r = rectRef.current;
+    if (!r && containerRef.current) {
+      const domRect = containerRef.current.getBoundingClientRect();
+      r = { left: domRect.left, top: domRect.top, width: domRect.width, height: domRect.height };
+      rectRef.current = r;
+    }
+    if (!r || r.width === 0 || r.height === 0) return;
+    const x = (e.clientX - r.left) / r.width - 0.5;
+    const y = (e.clientY - r.top) / r.height - 0.5;
     mouseX.set(x);
     mouseY.set(y);
   };
 
   const handleMouseLeave = () => {
+    rectRef.current = null;
     mouseX.set(0);
     mouseY.set(0);
   };
@@ -130,19 +145,19 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen h-screen bg-[#0c0716] text-[#e2d9f3] flex flex-col justify-between overflow-x-hidden overflow-y-auto lg:overflow-hidden font-sans selection:bg-[#EC4899]/30">
       
-      {/* Dynamic Ambient Background Glows matching mockup */}
-      <div className="fixed inset-0 pointer-events-none z-0">
+      {/* Dynamic Ambient Background Glows optimized for Safari GPU rendering */}
+      <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden transform-gpu">
         <div 
-          className="absolute -top-[10%] right-[10%] w-[680px] h-[680px] rounded-full blur-[150px] opacity-25"
-          style={{ background: 'radial-gradient(circle, #8B5CF6 0%, #EC4899 50%, transparent 70%)' }}
+          className="absolute -top-[10%] right-[10%] w-[680px] h-[680px] rounded-full opacity-25 pointer-events-none"
+          style={{ background: 'radial-gradient(circle, #8B5CF6 0%, #EC4899 35%, transparent 65%)' }}
         />
         <div 
-          className="absolute top-[20%] left-[-8%] w-[550px] h-[550px] rounded-full blur-[160px] opacity-20"
-          style={{ background: 'radial-gradient(circle, #F59E0B 0%, #E11D48 60%, transparent 75%)' }}
+          className="absolute top-[20%] left-[-8%] w-[550px] h-[550px] rounded-full opacity-20 pointer-events-none"
+          style={{ background: 'radial-gradient(circle, #F59E0B 0%, #E11D48 40%, transparent 70%)' }}
         />
         <div 
-          className="absolute bottom-[-10%] right-[25%] w-[700px] h-[700px] rounded-full blur-[180px] opacity-15"
-          style={{ background: 'radial-gradient(circle, #3B82F6 0%, #10B981 50%, transparent 70%)' }}
+          className="absolute bottom-[-10%] right-[25%] w-[700px] h-[700px] rounded-full opacity-15 pointer-events-none"
+          style={{ background: 'radial-gradient(circle, #3B82F6 0%, #10B981 35%, transparent 65%)' }}
         />
       </div>
 
@@ -274,9 +289,10 @@ export default function LandingPage() {
           {/* Right Column: 3D Stacked Isometric Planes */}
           <div 
             ref={containerRef}
+            onMouseEnter={handleMouseEnter}
             onMouseMove={handleMouseMove}
             onMouseLeave={handleMouseLeave}
-            className="lg:col-span-6 relative flex items-center justify-center h-[380px] sm:h-[430px] select-none cursor-grab active:cursor-grabbing"
+            className="lg:col-span-6 relative flex items-center justify-center h-[380px] sm:h-[430px] select-none cursor-grab active:cursor-grabbing transform-gpu"
             style={{ perspective: 1200 }}
           >
             {/* Interactive 3D Canvas Rig */}
@@ -419,7 +435,7 @@ export default function LandingPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           
           {/* Card 1: Substations */}
-          <div className="group rounded-2xl p-5 bg-[#130b24]/70 border border-white/10 backdrop-blur-md hover:border-white/20 transition-all duration-300 hover:bg-[#180e2e]/80">
+          <div className="group rounded-2xl p-5 bg-[#130b24] border border-white/10 shadow-lg hover:border-white/20 transition-all duration-300 hover:bg-[#180e2e]">
             <div className="text-3xl sm:text-4xl font-black text-[#FBBF24] tracking-tight mb-1 font-sans">
               39
             </div>
@@ -429,7 +445,7 @@ export default function LandingPage() {
           </div>
 
           {/* Card 2: Cell Towers */}
-          <div className="group rounded-2xl p-5 bg-[#130b24]/70 border border-white/10 backdrop-blur-md hover:border-white/20 transition-all duration-300 hover:bg-[#180e2e]/80">
+          <div className="group rounded-2xl p-5 bg-[#130b24] border border-white/10 shadow-lg hover:border-white/20 transition-all duration-300 hover:bg-[#180e2e]">
             <div className="text-3xl sm:text-4xl font-black text-[#A855F7] tracking-tight mb-1 font-sans">
               624
             </div>
@@ -439,7 +455,7 @@ export default function LandingPage() {
           </div>
 
           {/* Card 3: Hospitals */}
-          <div className="group rounded-2xl p-5 bg-[#130b24]/70 border border-white/10 backdrop-blur-md hover:border-white/20 transition-all duration-300 hover:bg-[#180e2e]/80">
+          <div className="group rounded-2xl p-5 bg-[#130b24] border border-white/10 shadow-lg hover:border-white/20 transition-all duration-300 hover:bg-[#180e2e]">
             <div className="text-3xl sm:text-4xl font-black text-[#F43F5E] tracking-tight mb-1 font-sans">
               289
             </div>
@@ -449,7 +465,7 @@ export default function LandingPage() {
           </div>
 
           {/* Card 4: Decay Horizon */}
-          <div className="group rounded-2xl p-5 bg-[#130b24]/70 border border-white/10 backdrop-blur-md hover:border-white/20 transition-all duration-300 hover:bg-[#180e2e]/80">
+          <div className="group rounded-2xl p-5 bg-[#130b24] border border-white/10 shadow-lg hover:border-white/20 transition-all duration-300 hover:bg-[#180e2e]">
             <div className="text-3xl sm:text-4xl font-black text-[#2DD4BF] tracking-tight mb-1 font-sans">
               72h
             </div>

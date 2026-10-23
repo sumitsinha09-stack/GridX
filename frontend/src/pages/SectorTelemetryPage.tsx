@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
 import { 
   Droplets, Radio, Hospital, Zap, Activity, Clock, RefreshCw
@@ -40,15 +40,21 @@ export default function SectorTelemetryPage() {
   const [hospitals, setHospitals] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const fetchTelemetry = async () => {
+  const abortRef = useRef<AbortController | null>(null);
+
+  const fetchTelemetry = useCallback(async (horizon: number) => {
+    if (abortRef.current) abortRef.current.abort();
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+
     setLoading(true);
     try {
       const res = await axios.post('http://localhost:8000/api/hetero/simulate', {
         broken_lines: [12, 15],
         demand_multiplier: 1.35,
-        time_horizon_hours: timeHorizon,
+        time_horizon_hours: horizon,
         enabled_layers: ['POWER', 'WATER', 'TELECOM', 'HEALTHCARE']
-      });
+      }, { signal: ctrl.signal });
 
       if (res.data.summary) {
         setSummary(res.data.summary);
@@ -58,16 +64,20 @@ export default function SectorTelemetryPage() {
       setWaterNodes(nodes.filter((n: any) => n.layer === 'WATER'));
       setTelecomTowers(nodes.filter((n: any) => n.layer === 'TELECOM'));
       setHospitals(nodes.filter((n: any) => n.layer === 'HEALTHCARE'));
-    } catch (err) {
+    } catch (err: any) {
+      if (axios.isCancel(err) || err.name === 'CanceledError') return;
       console.error("Failed to load telemetry:", err);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    fetchTelemetry();
-  }, [timeHorizon]);
+    const t = setTimeout(() => {
+      fetchTelemetry(timeHorizon);
+    }, 120);
+    return () => clearTimeout(t);
+  }, [timeHorizon, fetchTelemetry]);
 
   // Cosmic theme styles
   const pageBgClass = isLight ? 'bg-[#f8fafc] text-slate-900' : 'bg-[#0c0716] text-gray-200';
@@ -125,7 +135,7 @@ export default function SectorTelemetryPage() {
               ))}
             </div>
             <button 
-              onClick={fetchTelemetry} 
+              onClick={() => fetchTelemetry(timeHorizon)} 
               disabled={loading}
               className={`p-1.5 rounded-lg transition-colors ml-1 cursor-pointer ${
                 isLight ? 'text-slate-600 hover:text-amber-600 hover:bg-slate-100' : 'text-gray-400 hover:text-white hover:bg-white/10'

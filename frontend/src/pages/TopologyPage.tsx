@@ -10,7 +10,10 @@ import {
   Activity,
   ChevronDown,
   RotateCcw,
-  Gauge
+  Gauge,
+  Plus,
+  Minus,
+  Crosshair
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { getCachedSimulation } from '../lib/simulationCache';
@@ -51,6 +54,7 @@ export default function TopologyPage() {
   const [graphData, setGraphData] = useState<{ nodes: any[]; links: any[] }>(() => {
     return initialCache?.graph_data || { nodes: [], links: [] };
   });
+
   const [predictions, setPredictions] = useState<Record<number, number>>(() => {
     return initialCache?.power_predictions || {
       17: 0.983,
@@ -86,6 +90,18 @@ export default function TopologyPage() {
   const [loading, setLoading] = useState<boolean>(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const fgRef = useRef<any>(null);
+  const isFirstMount = useRef(true);
+  const hasAutoZoomed = useRef(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const simCacheRef = useRef<Map<string, any>>(new Map());
+
+  // Populate initial cache entry
+  useEffect(() => {
+    if (initialCache) {
+      simCacheRef.current.set('2,3,6||1.30|{}', initialCache);
+    }
+  }, []);
+
   const [dimensions, setDimensions] = useState(() => {
     if (typeof window !== 'undefined') {
       const w = Math.max(400, window.innerWidth - 470);
@@ -112,34 +128,100 @@ export default function TopologyPage() {
     };
   }, []);
 
-  // Configure D3 Force simulation once on mount
+  // Configure D3 Force simulation to expand into the IEEE 39-bus topology
   useEffect(() => {
     if (fgRef.current) {
-      fgRef.current.d3Force('charge')?.strength(-140);
-      fgRef.current.d3Force('link')?.distance(55);
+      // Power substations repel strongly to expand the IEEE 39-bus grid,
+      // while dependent assets have light charge so they cluster right beside their parent substation
+      fgRef.current.d3Force('charge')?.strength((node: any) => {
+        return node.layer === 'POWER' ? -240 : -15;
+      });
+
+      // Power transmission corridors have wide distance; dependent links are compact satellites
+      fgRef.current.d3Force('link')
+        ?.distance((link: any) => {
+          return link.layer === 'POWER' ? 85 : 22;
+        })
+        ?.strength((link: any) => {
+          return link.layer === 'POWER' ? 0.6 : 1.0;
+        });
+    }
+  }, [graphData.nodes.length]);
+
+  const handleEngineStop = useCallback(() => {
+    if (fgRef.current && !hasAutoZoomed.current) {
+      hasAutoZoomed.current = true;
+      fgRef.current.centerAt(0, 0, 500);
+      fgRef.current.zoom(1.15, 500);
     }
   }, []);
 
-  // Run backend simulation
-  const runSimulation = useCallback(async () => {
+  // Run backend simulation with caching and abort handling
+  const runSimulation = useCallback(async (
+    lines: number[],
+    buses: number[],
+    mult: number,
+    voltages: Record<number, number>
+  ) => {
+    const sortedLines = [...lines].sort((a, b) => a - b).join(',');
+    const sortedBuses = [...buses].sort((a, b) => a - b).join(',');
+    const sortedVoltages = JSON.stringify(voltages);
+    const cacheKey = `${sortedLines}|${sortedBuses}|${mult.toFixed(2)}|${sortedVoltages}`;
+
+    // Instant local cache hit (0ms)
+    const cached = simCacheRef.current.get(cacheKey);
+    if (cached) {
+      if (cached.graph_data) {
+        setGraphData(prev => {
+          const posMap = new Map((prev.nodes || []).map((n: any) => [n.id, { x: n.x, y: n.y, vx: n.vx, vy: n.vy }]));
+          const mergedNodes = cached.graph_data.nodes.map((n: any) => {
+            const pos = posMap.get(n.id);
+            return pos && pos.x !== undefined 
+              ? { ...n, x: pos.x, y: pos.y, vx: pos.vx, vy: pos.vy } 
+              : n;
+          });
+          return { nodes: mergedNodes, links: cached.graph_data.links };
+        });
+      }
+      if (cached.power_predictions) setPredictions(cached.power_predictions);
+      if (cached.bus_risks) setBusRisks(cached.bus_risks);
+      if (cached.bus_telemetry) setBusTelemetry(cached.bus_telemetry);
+      if (cached.summary) setSummary(cached.summary);
+      setLoading(false);
+      return;
+    }
+
+    // Cancel in-flight request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const abortCtrl = new AbortController();
+    abortControllerRef.current = abortCtrl;
+
     setLoading(true);
     try {
       const res = await axios.post('http://localhost:8000/api/hetero/simulate', {
-        broken_lines: brokenLines,
-        tripped_buses: trippedBuses,
-        demand_multiplier: multiplier,
-        node_multipliers: nodeMultipliers,
+        broken_lines: lines,
+        tripped_buses: buses,
+        demand_multiplier: mult,
+        node_multipliers: voltages,
         time_horizon_hours: 4.0,
-        enabled_layers: enabledLayers
+        enabled_layers: ['POWER', 'WATER', 'TELECOM', 'HEALTHCARE', 'TRANSPORTATION']
+      }, {
+        signal: abortCtrl.signal,
+        timeout: 5000
       });
 
       if (res.data) {
+        simCacheRef.current.set(cacheKey, res.data);
         if (res.data.graph_data) {
           setGraphData(prev => {
-            const posMap = new Map((prev.nodes || []).map((n: any) => [n.id, { x: n.x, y: n.y }]));
+            const posMap = new Map((prev.nodes || []).map((n: any) => [n.id, { x: n.x, y: n.y, vx: n.vx, vy: n.vy }]));
             const mergedNodes = res.data.graph_data.nodes.map((n: any) => {
               const pos = posMap.get(n.id);
-              return pos && pos.x !== undefined ? { ...n, x: pos.x, y: pos.y } : n;
+              return pos && pos.x !== undefined 
+                ? { ...n, x: pos.x, y: pos.y, vx: pos.vx, vy: pos.vy } 
+                : n;
             });
             return { nodes: mergedNodes, links: res.data.graph_data.links };
           });
@@ -149,28 +231,29 @@ export default function TopologyPage() {
         if (res.data.bus_telemetry) setBusTelemetry(res.data.bus_telemetry);
         if (res.data.summary) setSummary(res.data.summary);
       }
-    } catch (err) {
-      console.warn("Backend unavailable, using simulated cascade state:", err);
-      const defaultNodes: any[] = [];
-      for (let i = 0; i < 39; i++) {
-        defaultNodes.push({
-          id: `P_${i}`,
-          bus_id: i,
-          name: `Substation ${i + 1}`,
-          layer: 'POWER',
-          risk: brokenLines.includes(i) ? 0.95 : 0.15 * multiplier,
-          is_tripped: trippedBuses.includes(i)
-        });
+    } catch (err: any) {
+      if (axios.isCancel(err) || err.name === 'CanceledError') {
+        return;
       }
-      setGraphData({ nodes: defaultNodes, links: [] });
+      console.warn("Backend unavailable, using simulated cascade state:", err);
     } finally {
       setLoading(false);
     }
-  }, [brokenLines, trippedBuses, multiplier, nodeMultipliers, enabledLayers]);
+  }, []);
 
+  // Debounced simulation effect: 0ms on mount, 120ms debounce on user slider adjustments
   useEffect(() => {
-    runSimulation();
-  }, [runSimulation]);
+    if (isFirstMount.current) {
+      isFirstMount.current = false;
+      return; // Skip redundant simulation on initial load (0ms instant page entry!)
+    }
+
+    const timer = setTimeout(() => {
+      runSimulation(brokenLines, trippedBuses, multiplier, nodeMultipliers);
+    }, 120);
+
+    return () => clearTimeout(timer);
+  }, [brokenLines, trippedBuses, multiplier, nodeMultipliers, runSimulation]);
 
   // Derived metrics for AI Cascade Risk
   const predictionValues = useMemo(() => Object.values(predictions), [predictions]);
@@ -238,8 +321,13 @@ export default function TopologyPage() {
     });
   }, [currentSubstationTelemetry, brokenLines, isSelectedSubstationTripped, predictions]);
 
-  // Actions
+  // Fast Sets for O(1) lookups inside rendering loops
+  const trippedBusesSet = useMemo(() => new Set(trippedBuses), [trippedBuses]);
+  const brokenLinesSet = useMemo(() => new Set(brokenLines), [brokenLines]);
+
+  // Actions with Optimistic UI updates (0ms perceived latency)
   const handleToggleSubstationFailure = (busId: number) => {
+    const isNowTripped = !trippedBuses.includes(busId);
     setTrippedBuses(prev => {
       if (prev.includes(busId)) {
         return prev.filter(b => b !== busId);
@@ -247,6 +335,12 @@ export default function TopologyPage() {
         return [...prev, busId];
       }
     });
+
+    // Optimistic bus risk and failure status update (0ms immediate feedback)
+    setBusRisks(prev => ({
+      ...prev,
+      [busId]: isNowTripped ? 1.0 : 0.12
+    }));
   };
 
   const handleVoltageChange = (busId: number, val: number) => {
@@ -266,6 +360,15 @@ export default function TopologyPage() {
     setNodeMultipliers({});
     setNodeVoltages({});
     setSelectedOtherNode(null);
+    setMultiplier(1.30);
+
+    // Instant 0ms synchronous rollback to pre-baked baseline
+    if (initialCache) {
+      if (initialCache.power_predictions) setPredictions(initialCache.power_predictions);
+      if (initialCache.bus_risks) setBusRisks(initialCache.bus_risks);
+      if (initialCache.bus_telemetry) setBusTelemetry(initialCache.bus_telemetry);
+      if (initialCache.summary) setSummary(initialCache.summary);
+    }
   };
 
   const forceTripRandomBranch = () => {
@@ -297,50 +400,21 @@ export default function TopologyPage() {
     }
   }, []);
 
-  // Fail-Safe Click Coordinate Handler on Canvas
-  const handleCanvasContainerClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!fgRef.current) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const clickX = e.clientX - rect.left;
-    const clickY = e.clientY - rect.top;
-
-    try {
-      const coords = fgRef.current.screen2GraphCoords(clickX, clickY);
-      if (!coords) return;
-
-      let closestNode: any = null;
-      let minDistance = 24;
-
-      for (const node of graphData.nodes) {
-        if (node.x !== undefined && node.y !== undefined) {
-          const dist = Math.hypot(node.x - coords.x, node.y - coords.y);
-          if (dist < minDistance) {
-            minDistance = dist;
-            closestNode = node;
-          }
-        }
-      }
-
-      if (closestNode) {
-        handleSelectNode(closestNode);
-      }
-    } catch (err) {
-      console.warn("Coordinate translation fallback:", err);
-    }
-  };
-
   // Pointer Area Paint for ForceGraph2D
   const paintNodePointerArea = useCallback((node: any, color: string, ctx: CanvasRenderingContext2D) => {
+    if (!enabledLayers.includes(node.layer)) return;
     ctx.beginPath();
     ctx.arc(node.x, node.y, 18, 0, 2 * Math.PI, false);
     ctx.fillStyle = color;
     ctx.fill();
-  }, []);
+  }, [enabledLayers]);
 
-  // Canvas Node Renderer
+  // Canvas Node Renderer with fast O(1) Set lookups
   const paintNode = useCallback((node: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
+    if (!enabledLayers.includes(node.layer)) return;
+
     const isSelected = (node.layer === 'POWER' && node.bus_id === selectedBusId) || (selectedOtherNode && selectedOtherNode.id === node.id);
-    const isTripped = (node.bus_id !== undefined && trippedBuses.includes(node.bus_id)) || node.is_tripped;
+    const isTripped = (node.bus_id !== undefined && trippedBusesSet.has(node.bus_id)) || node.is_tripped;
     const isFailed = node.is_failed || node.risk > 0.70;
 
     let radius = 7.5;
@@ -407,7 +481,10 @@ export default function TopologyPage() {
     }
 
     const fontSize = Math.max(8, Math.min(14, Math.round(11 / Math.max(0.5, globalScale))));
-    ctx.font = `800 ${fontSize}px Inter, sans-serif`;
+    const fontStr = `800 ${fontSize}px Inter, sans-serif`;
+    if (ctx.font !== fontStr) {
+      ctx.font = fontStr;
+    }
     ctx.fillStyle = isSelected 
       ? (isLight ? '#e11d48' : '#F43F5E') 
       : isLight 
@@ -415,17 +492,55 @@ export default function TopologyPage() {
         : (node.layer === 'POWER' ? '#FBBF24' : '#a19ab5');
     ctx.textAlign = 'center';
     ctx.fillText(label, node.x, node.y + radius + 12);
-  }, [selectedBusId, selectedOtherNode, trippedBuses, isLight]);
+  }, [selectedBusId, selectedOtherNode, trippedBusesSet, isLight, enabledLayers]);
+
+  // Stable Link Style Callbacks to prevent ForceGraph re-runs
+  const getLinkColor = useCallback((link: any) => {
+    const srcLayer = typeof link.source === 'object' ? link.source.layer : undefined;
+    const tgtLayer = typeof link.target === 'object' ? link.target.layer : undefined;
+    if ((srcLayer && !enabledLayers.includes(srcLayer)) || (tgtLayer && !enabledLayers.includes(tgtLayer))) {
+      return 'transparent';
+    }
+
+    if (link.layer === 'INTER_DEPENDENCY') {
+      return link.is_broken 
+        ? 'rgba(220, 38, 38, 0.85)' 
+        : (isLight ? 'rgba(100, 116, 139, 0.45)' : 'rgba(255, 255, 255, 0.25)');
+    }
+    if (link.is_broken || brokenLinesSet.has(link.line_id)) return 'rgba(220, 38, 38, 0.85)';
+    if (link.risk > 0.85) return '#dc2626';
+    if (link.risk > 0.50) return '#d97706';
+    return isLight ? '#16a34a' : '#22c55e';
+  }, [brokenLinesSet, isLight, enabledLayers]);
+
+  const getLinkWidth = useCallback((link: any) => {
+    const srcLayer = typeof link.source === 'object' ? link.source.layer : undefined;
+    const tgtLayer = typeof link.target === 'object' ? link.target.layer : undefined;
+    if ((srcLayer && !enabledLayers.includes(srcLayer)) || (tgtLayer && !enabledLayers.includes(tgtLayer))) {
+      return 0;
+    }
+
+    if (link.layer === 'INTER_DEPENDENCY') return 1.5;
+    if (link.is_broken || brokenLinesSet.has(link.line_id)) return 2.4;
+    if (link.risk > 0.85) return 3.5;
+    if (link.risk > 0.50) return 2.6;
+    return 2.2;
+  }, [brokenLinesSet, enabledLayers]);
+
+  const getLinkLineDash = useCallback((link: any) => {
+    if (link.layer === 'INTER_DEPENDENCY') return [3, 3];
+    return (link.is_broken || brokenLinesSet.has(link.line_id) ? [4, 4] : []);
+  }, [brokenLinesSet]);
 
   // Current voltage calculations for selected substation
   const currentVoltageMult = nodeVoltages[selectedBusId] || 1.0;
   const nominalVoltageKv = currentSubstationTelemetry.voltage_kv || 345.0;
   const displayVoltageKv = (nominalVoltageKv * currentVoltageMult).toFixed(1);
 
-  // Theme-aware Solid Class Tokens (Zero transparency, high contrast)
+  // Theme-aware Solid Class Tokens (Zero transparency, high contrast, Safari GPU optimized)
   const cardBgClass = isLight 
     ? 'bg-white border-slate-200 text-slate-900 shadow-md' 
-    : 'bg-[#130b24]/85 border-white/10 text-white backdrop-blur-md shadow-2xl';
+    : 'bg-[#130b24] border-white/10 text-white shadow-2xl';
 
   const innerBoxClass = isLight
     ? 'bg-[#f8fafc] border-slate-200 text-slate-800'
@@ -449,14 +564,13 @@ export default function TopologyPage() {
       {/* ========================================================================= */}
       <div 
         ref={containerRef}
-        onClick={handleCanvasContainerClick}
-        className={`flex-1 h-full rounded-2xl border relative overflow-hidden flex flex-col shadow-xl cursor-pointer transition-colors duration-200 ${
+        className={`flex-1 h-full rounded-2xl border relative overflow-hidden flex flex-col shadow-xl transition-colors duration-200 ${
           isLight ? 'bg-[#f8fafc] border-slate-200' : 'bg-[#0c0716] border-white/10'
         }`}
       >
         {/* Top-Left: Network Identifier + Substation Dropdown Selector */}
-        <div className={`absolute top-3.5 left-4 z-20 flex items-center gap-2.5 border px-3 py-1.5 rounded-full shadow-md pointer-events-auto backdrop-blur-md transition-colors ${
-          isLight ? 'bg-white border-slate-200 text-slate-900' : 'bg-[#130b24]/85 border-white/10 text-white'
+        <div className={`absolute top-3.5 left-4 z-20 flex items-center gap-2.5 border px-3 py-1.5 rounded-full shadow-md pointer-events-auto transition-colors ${
+          isLight ? 'bg-white border-slate-200 text-slate-900' : 'bg-[#130b24] border-white/10 text-white'
         }`}>
           <Zap className="w-4 h-4 text-[#F59E0B]" />
           <span className={`font-black text-xs tracking-wider ${headerTextClass}`}>IEEE 39-Bus</span>
@@ -485,8 +599,8 @@ export default function TopologyPage() {
         </div>
 
         {/* Top-Right: Department Overlays (Power, Water, Telecom, Healthcare) */}
-        <div className={`absolute top-3.5 right-4 z-20 flex items-center gap-1.5 border p-1 rounded-full shadow-md pointer-events-auto backdrop-blur-md transition-colors ${
-          isLight ? 'bg-white border-slate-200' : 'bg-[#130b24]/85 border-white/10'
+        <div className={`absolute top-3.5 right-4 z-20 flex items-center gap-1.5 border p-1 rounded-full shadow-md pointer-events-auto transition-colors ${
+          isLight ? 'bg-white border-slate-200' : 'bg-[#130b24] border-white/10'
         }`}>
           {[
             { id: 'POWER', label: 'Power', icon: Zap, activeColor: '#FBBF24', activeClass: 'bg-[#FBBF24]/15 border-[#FBBF24]/40 text-[#FBBF24]' },
@@ -517,7 +631,37 @@ export default function TopologyPage() {
           })}
         </div>
 
-        {/* Force Graph 2D */}
+        {/* Floating Canvas Zoom Controls */}
+        <div className={`absolute top-16 right-4 z-20 flex flex-col gap-1 border p-1 rounded-xl shadow-md pointer-events-auto ${
+          isLight ? 'bg-white border-slate-200 text-slate-700' : 'bg-[#130b24] border-white/10 text-gray-300'
+        }`}>
+          <button 
+            onClick={() => fgRef.current?.zoom(fgRef.current.zoom() * 1.3, 300)} 
+            className={`p-1.5 rounded-lg transition-colors cursor-pointer ${isLight ? 'hover:bg-slate-100 hover:text-slate-900' : 'hover:bg-white/10 hover:text-white'}`}
+            title="Zoom In"
+          >
+            <Plus className="w-4 h-4" />
+          </button>
+          <button 
+            onClick={() => fgRef.current?.zoom(fgRef.current.zoom() * 0.7, 300)} 
+            className={`p-1.5 rounded-lg transition-colors cursor-pointer ${isLight ? 'hover:bg-slate-100 hover:text-slate-900' : 'hover:bg-white/10 hover:text-white'}`}
+            title="Zoom Out"
+          >
+            <Minus className="w-4 h-4" />
+          </button>
+          <button 
+            onClick={() => {
+              fgRef.current?.centerAt(0, 0, 400);
+              fgRef.current?.zoom(1.15, 400);
+            }} 
+            className={`p-1.5 rounded-lg transition-colors cursor-pointer ${isLight ? 'hover:bg-slate-100 hover:text-slate-900' : 'hover:bg-white/10 hover:text-white'}`}
+            title="Reset View"
+          >
+            <Crosshair className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Force Graph 2D with High-Precision Multi-Sector Topology Engine */}
         <div className="flex-1 w-full h-full flex items-center justify-center relative">
           {graphData.nodes.length > 0 && dimensions.width > 0 ? (
             <ForceGraph2D
@@ -528,41 +672,20 @@ export default function TopologyPage() {
               nodeRelSize={9}
               nodeCanvasObject={paintNode}
               nodePointerAreaPaint={paintNodePointerArea}
-              onNodeClick={(node: any) => {
-                handleSelectNode(node);
-              }}
+              onNodeClick={handleSelectNode}
               onLinkClick={(link: any) => {
                 if (link.line_id !== undefined) {
                   handleToggleLineTrip(link.line_id);
                 }
               }}
-              linkColor={(link: any) => {
-                if (link.layer === 'INTER_DEPENDENCY') {
-                  return link.is_broken 
-                    ? 'rgba(220, 38, 38, 0.85)' 
-                    : (isLight ? 'rgba(100, 116, 139, 0.35)' : 'rgba(255, 255, 255, 0.15)');
-                }
-                if (link.is_broken || brokenLines.includes(link.line_id)) return 'rgba(220, 38, 38, 0.7)';
-                if (link.risk > 0.85) return '#dc2626';
-                if (link.risk > 0.50) return '#d97706';
-                return isLight ? '#16a34a' : '#22c55e';
-              }}
-              linkWidth={(link: any) => {
-                if (link.layer === 'INTER_DEPENDENCY') return 1.2;
-                if (link.is_broken || brokenLines.includes(link.line_id)) return 2.0;
-                if (link.risk > 0.85) return 3.2;
-                if (link.risk > 0.50) return 2.4;
-                return 2.0;
-              }}
-              linkLineDash={(link: any) => {
-                if (link.layer === 'INTER_DEPENDENCY') return [3, 3];
-                return (link.is_broken || brokenLines.includes(link.line_id) ? [4, 4] : []);
-              }}
+              linkColor={getLinkColor}
+              linkWidth={getLinkWidth}
+              linkLineDash={getLinkLineDash}
               backgroundColor={canvasBg}
-              warmupTicks={0}
-              cooldownTicks={10}
-              d3VelocityDecay={0.4}
-              d3AlphaDecay={0.06}
+              cooldownTicks={120}
+              d3VelocityDecay={0.3}
+              enableNodeDrag={true}
+              onEngineStop={handleEngineStop}
             />
           ) : (
             <div className={`font-mono text-xs animate-pulse ${labelTextClass}`}>Initializing Topology Graph...</div>
@@ -571,13 +694,13 @@ export default function TopologyPage() {
 
         {/* Canvas Bottom Legend / Instructions */}
         <div className="absolute bottom-3 left-4 right-4 z-20 flex justify-between items-center pointer-events-none">
-          <div className={`flex items-center gap-3 border px-3 py-1.5 rounded-full text-[11px] font-mono pointer-events-auto backdrop-blur-md shadow-md ${
-            isLight ? 'bg-white border-slate-200 text-slate-800' : 'bg-[#130b24]/85 border-white/10 text-[#a19ab5]'
+          <div className={`flex items-center gap-3 border px-3 py-1.5 rounded-full text-[11px] font-mono pointer-events-auto shadow-md ${
+            isLight ? 'bg-white border-slate-200 text-slate-800' : 'bg-[#130b24] border-white/10 text-[#a19ab5]'
           }`}>
             <span>💡 <strong>Click any node</strong> on graph or select from dropdown</span>
           </div>
-          <div className={`flex items-center gap-3 border px-3 py-1.5 rounded-full text-[11px] font-mono pointer-events-auto backdrop-blur-md shadow-md ${
-            isLight ? 'bg-white border-slate-200 text-slate-800' : 'bg-[#130b24]/85 border-white/10'
+          <div className={`flex items-center gap-3 border px-3 py-1.5 rounded-full text-[11px] font-mono pointer-events-auto shadow-md ${
+            isLight ? 'bg-white border-slate-200 text-slate-800' : 'bg-[#130b24] border-white/10'
           }`}>
             <span className="flex items-center gap-1.5 text-[#FBBF24] font-bold"><span className="w-2.5 h-2.5 rounded-[3px] bg-[#FBBF24]" /> Power</span>
             <span className="flex items-center gap-1.5 text-[#2DD4BF] font-bold"><span className="w-2.5 h-2.5 rounded-[3px] bg-[#2DD4BF]" /> Water</span>

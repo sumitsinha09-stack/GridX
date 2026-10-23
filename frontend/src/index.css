@@ -66,3 +66,15 @@
 ::-webkit-scrollbar-thumb:hover {
   background: var(--grid-text-dim);
 }
+
+/* Safari / WebKit GPU & Canvas acceleration */
+canvas {
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+  will-change: transform;
+}
+
+* {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
