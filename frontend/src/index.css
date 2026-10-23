@@ -16,17 +16,17 @@
   }
 
   :root {
-    --grid-bg: #07090e;
-    --grid-bg-header: #0a0d14;
-    --grid-canvas-bg: #0b0e17;
-    --grid-card-bg: #101522;
-    --grid-box-bg: #141b2c;
-    --grid-subbox-bg: #070a12;
-    --grid-border: rgba(255, 255, 255, 0.12);
-    --grid-border-subtle: rgba(255, 255, 255, 0.06);
+    --grid-bg: #0c0716;
+    --grid-bg-header: #10091e;
+    --grid-canvas-bg: #0c0716;
+    --grid-card-bg: #130b24;
+    --grid-box-bg: #180e2e;
+    --grid-subbox-bg: #0c0716;
+    --grid-border: rgba(255, 255, 255, 0.10);
+    --grid-border-subtle: rgba(255, 255, 255, 0.05);
     --grid-text: #ffffff;
-    --grid-text-muted: #cbd5e1;
-    --grid-text-dim: #94a3b8;
+    --grid-text-muted: #c0b8d4;
+    --grid-text-dim: #a19ab5;
   }
 
   body.light-theme, html.light-theme {

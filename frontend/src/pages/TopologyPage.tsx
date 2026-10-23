@@ -13,6 +13,7 @@ import {
   Gauge
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
+import { getCachedSimulation } from '../lib/simulationCache';
 
 interface SummaryMetrics {
   time_horizon_hours: number;
@@ -44,36 +45,55 @@ export default function TopologyPage() {
   const [selectedBusId, setSelectedBusId] = useState<number>(13);
   const [selectedOtherNode, setSelectedOtherNode] = useState<any | null>(null);
 
-  // Telemetry & graph data
-  const [graphData, setGraphData] = useState<{ nodes: any[]; links: any[] }>({ nodes: [], links: [] });
-  const [predictions, setPredictions] = useState<Record<number, number>>({
-    17: 0.983,
-    16: 0.972,
-    8: 0.954,
-    4: 0.921,
-    7: 0.884
+  // Telemetry & graph data initialized instantly from prewarmed cache
+  const initialCache = getCachedSimulation();
+
+  const [graphData, setGraphData] = useState<{ nodes: any[]; links: any[] }>(() => {
+    return initialCache?.graph_data || { nodes: [], links: [] };
   });
-  const [busRisks, setBusRisks] = useState<Record<number, number>>({});
-  const [busTelemetry, setBusTelemetry] = useState<Record<string | number, any>>({});
-  const [summary, setSummary] = useState<SummaryMetrics>({
-    time_horizon_hours: 4.0,
-    power_buses_offline: 3,
-    power_lines_tripped: 3,
-    water_pumps_tripped: 4,
-    estimated_water_loss_gpm: 11182,
-    traffic_signals_offline: 168,
-    transit_corridors_impacted: 2,
-    cell_towers_offline: 0,
-    cell_towers_on_battery: 64,
-    hospitals_on_generator: 89,
-    hospitals_critical: 0,
-    icu_beds_at_risk: 0
+  const [predictions, setPredictions] = useState<Record<number, number>>(() => {
+    return initialCache?.power_predictions || {
+      17: 0.983,
+      16: 0.972,
+      8: 0.954,
+      4: 0.921,
+      7: 0.884
+    };
+  });
+  const [busRisks, setBusRisks] = useState<Record<number, number>>(() => {
+    return initialCache?.bus_risks || {};
+  });
+  const [busTelemetry, setBusTelemetry] = useState<Record<string | number, any>>(() => {
+    return initialCache?.bus_telemetry || {};
+  });
+  const [summary, setSummary] = useState<SummaryMetrics>(() => {
+    return initialCache?.summary || {
+      time_horizon_hours: 4.0,
+      power_buses_offline: 3,
+      power_lines_tripped: 3,
+      water_pumps_tripped: 4,
+      estimated_water_loss_gpm: 11182,
+      traffic_signals_offline: 168,
+      transit_corridors_impacted: 2,
+      cell_towers_offline: 0,
+      cell_towers_on_battery: 64,
+      hospitals_on_generator: 89,
+      hospitals_critical: 0,
+      icu_beds_at_risk: 0
+    };
   });
 
   const [loading, setLoading] = useState<boolean>(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const fgRef = useRef<any>(null);
-  const [dimensions, setDimensions] = useState({ width: 600, height: 750 });
+  const [dimensions, setDimensions] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const w = Math.max(400, window.innerWidth - 470);
+      const h = Math.max(400, window.innerHeight - 80);
+      return { width: w, height: h };
+    }
+    return { width: 800, height: 750 };
+  });
 
   // Update canvas size dynamically
   useEffect(() => {
@@ -87,20 +107,18 @@ export default function TopologyPage() {
     };
     updateSize();
     window.addEventListener('resize', updateSize);
-    const timer = setTimeout(updateSize, 100);
     return () => {
       window.removeEventListener('resize', updateSize);
-      clearTimeout(timer);
     };
   }, []);
 
-  // Configure D3 Force simulation to spread nodes gracefully
+  // Configure D3 Force simulation once on mount
   useEffect(() => {
     if (fgRef.current) {
       fgRef.current.d3Force('charge')?.strength(-140);
       fgRef.current.d3Force('link')?.distance(55);
     }
-  }, [graphData]);
+  }, []);
 
   // Run backend simulation
   const runSimulation = useCallback(async () => {
@@ -116,7 +134,16 @@ export default function TopologyPage() {
       });
 
       if (res.data) {
-        if (res.data.graph_data) setGraphData(res.data.graph_data);
+        if (res.data.graph_data) {
+          setGraphData(prev => {
+            const posMap = new Map((prev.nodes || []).map((n: any) => [n.id, { x: n.x, y: n.y }]));
+            const mergedNodes = res.data.graph_data.nodes.map((n: any) => {
+              const pos = posMap.get(n.id);
+              return pos && pos.x !== undefined ? { ...n, x: pos.x, y: pos.y } : n;
+            });
+            return { nodes: mergedNodes, links: res.data.graph_data.links };
+          });
+        }
         if (res.data.power_predictions) setPredictions(res.data.power_predictions);
         if (res.data.bus_risks) setBusRisks(res.data.bus_risks);
         if (res.data.bus_telemetry) setBusTelemetry(res.data.bus_telemetry);
@@ -317,44 +344,44 @@ export default function TopologyPage() {
     const isFailed = node.is_failed || node.risk > 0.70;
 
     let radius = 7.5;
-    let fill = isLight ? '#2563eb' : '#3b82f6'; // Strong blue for power
+    let fill = isLight ? '#d97706' : '#FBBF24'; // Electric gold for power
 
     if (node.layer === 'POWER') {
       radius = 8.5;
       if (isTripped || isFailed) {
-        fill = '#dc2626'; // Bold crimson
+        fill = '#EF4444'; // Bold crimson
       } else if (node.risk > 0.40) {
-        fill = '#d97706'; // Bold amber
+        fill = '#F59E0B'; // Bold amber
       } else {
-        fill = isLight ? '#2563eb' : '#38bdf8'; // High contrast blue
+        fill = isLight ? '#d97706' : '#FBBF24'; // Electric gold
       }
     } else if (node.layer === 'WATER') {
       radius = 6;
-      fill = isFailed ? '#dc2626' : (isLight ? '#0891b2' : '#06b6d4');
+      fill = isFailed ? '#EF4444' : (isLight ? '#0d9488' : '#2DD4BF'); // Bioluminescent teal
     } else if (node.layer === 'TELECOM') {
       radius = 6;
       fill = node.status === 'BATTERY_EXHAUSTED' || isFailed 
-        ? '#dc2626' 
+        ? '#EF4444' 
         : node.status === 'ON_BACKUP_BATTERY' 
-          ? '#d97706' 
-          : (isLight ? '#7c3aed' : '#a855f7');
+          ? '#F59E0B' 
+          : (isLight ? '#9333ea' : '#A855F7'); // Cyber violet
     } else if (node.layer === 'HEALTHCARE') {
       radius = 6.5;
       fill = isFailed 
-        ? '#dc2626' 
+        ? '#EF4444' 
         : node.status === 'ON_EMERGENCY_GENERATOR' 
-          ? '#d97706' 
-          : (isLight ? '#059669' : '#10b981');
+          ? '#F59E0B' 
+          : (isLight ? '#e11d48' : '#F43F5E'); // Hot neon rose
     }
 
     // Outer glow for selected node
     if (isSelected) {
       ctx.beginPath();
       ctx.arc(node.x, node.y, radius + 7, 0, 2 * Math.PI, false);
-      ctx.fillStyle = isLight ? 'rgba(14, 165, 233, 0.35)' : 'rgba(0, 229, 255, 0.4)';
+      ctx.fillStyle = isLight ? 'rgba(244, 63, 94, 0.25)' : 'rgba(244, 63, 94, 0.4)';
       ctx.fill();
       ctx.lineWidth = 3;
-      ctx.strokeStyle = isLight ? '#0284c7' : '#00e5ff';
+      ctx.strokeStyle = isLight ? '#e11d48' : '#F43F5E';
       ctx.stroke();
     }
 
@@ -364,7 +391,7 @@ export default function TopologyPage() {
     ctx.fillStyle = fill;
     ctx.fill();
     ctx.lineWidth = 2;
-    ctx.strokeStyle = isSelected ? '#ffffff' : (isLight ? '#ffffff' : '#070a12');
+    ctx.strokeStyle = isSelected ? '#ffffff' : (isLight ? '#ffffff' : '#0c0716');
     ctx.stroke();
 
     // Node Label
@@ -379,12 +406,13 @@ export default function TopologyPage() {
       label = 'H';
     }
 
-    ctx.font = `800 ${10 / globalScale}px Inter, sans-serif`;
+    const fontSize = Math.max(8, Math.min(14, Math.round(11 / Math.max(0.5, globalScale))));
+    ctx.font = `800 ${fontSize}px Inter, sans-serif`;
     ctx.fillStyle = isSelected 
-      ? (isLight ? '#0284c7' : '#00e5ff') 
+      ? (isLight ? '#e11d48' : '#F43F5E') 
       : isLight 
         ? '#0f172a' 
-        : (node.layer === 'POWER' ? '#f1f5f9' : '#94a3b8');
+        : (node.layer === 'POWER' ? '#FBBF24' : '#a19ab5');
     ctx.textAlign = 'center';
     ctx.fillText(label, node.x, node.y + radius + 12);
   }, [selectedBusId, selectedOtherNode, trippedBuses, isLight]);
@@ -397,19 +425,19 @@ export default function TopologyPage() {
   // Theme-aware Solid Class Tokens (Zero transparency, high contrast)
   const cardBgClass = isLight 
     ? 'bg-white border-slate-200 text-slate-900 shadow-md' 
-    : 'bg-[#101522] border-white/10 text-white shadow-2xl';
+    : 'bg-[#130b24]/85 border-white/10 text-white backdrop-blur-md shadow-2xl';
 
   const innerBoxClass = isLight
     ? 'bg-[#f8fafc] border-slate-200 text-slate-800'
-    : 'bg-[#141b2c] border-white/5 text-gray-200';
+    : 'bg-[#180e2e]/90 border-white/10 text-[#e2d9f3]';
 
   const itemBoxClass = isLight
     ? 'bg-white border-slate-200 text-slate-900 shadow-sm'
-    : 'bg-[#090d16] border-white/5 text-gray-200';
+    : 'bg-[#0f091c]/90 border-white/5 text-[#c0b8d4]';
 
   const headerTextClass = isLight ? 'text-slate-900 font-extrabold' : 'text-white font-extrabold';
-  const labelTextClass = isLight ? 'text-slate-600 font-medium' : 'text-gray-400';
-  const canvasBg = isLight ? '#f8fafc' : '#0b0e17';
+  const labelTextClass = isLight ? 'text-slate-600 font-medium' : 'text-[#a19ab5]';
+  const canvasBg = isLight ? '#f8fafc' : '#0c0716';
 
   return (
     <div className={`flex-1 w-full h-full flex font-sans overflow-hidden p-3 gap-3 select-none transition-colors duration-200 ${
@@ -423,48 +451,48 @@ export default function TopologyPage() {
         ref={containerRef}
         onClick={handleCanvasContainerClick}
         className={`flex-1 h-full rounded-2xl border relative overflow-hidden flex flex-col shadow-xl cursor-pointer transition-colors duration-200 ${
-          isLight ? 'bg-[#f8fafc] border-slate-200' : 'bg-[#0b0e17] border-white/10'
+          isLight ? 'bg-[#f8fafc] border-slate-200' : 'bg-[#0c0716] border-white/10'
         }`}
       >
         {/* Top-Left: Network Identifier + Substation Dropdown Selector */}
-        <div className={`absolute top-3.5 left-4 z-20 flex items-center gap-2.5 border px-3 py-1.5 rounded-xl shadow-md pointer-events-auto transition-colors ${
-          isLight ? 'bg-white border-slate-200 text-slate-900' : 'bg-[#101522] border-white/10 text-white'
+        <div className={`absolute top-3.5 left-4 z-20 flex items-center gap-2.5 border px-3 py-1.5 rounded-full shadow-md pointer-events-auto backdrop-blur-md transition-colors ${
+          isLight ? 'bg-white border-slate-200 text-slate-900' : 'bg-[#130b24]/85 border-white/10 text-white'
         }`}>
-          <Zap className="w-4 h-4 text-cyan-500" />
-          <span className={`font-extrabold text-xs tracking-wider ${headerTextClass}`}>IEEE 39-Bus</span>
+          <Zap className="w-4 h-4 text-[#F59E0B]" />
+          <span className={`font-black text-xs tracking-wider ${headerTextClass}`}>IEEE 39-Bus</span>
           
           {/* Quick Substation Select Dropdown */}
-          <div className="relative flex items-center ml-1 pl-2 border-l border-slate-300 dark:border-white/10">
+          <div className="relative flex items-center ml-1 pl-2 border-l border-white/10">
             <select
               value={selectedBusId}
               onChange={(e) => setSelectedBusId(parseInt(e.target.value))}
-              className={`font-mono text-xs font-bold py-1 px-2.5 rounded-lg border focus:outline-none cursor-pointer ${
+              className={`font-mono text-xs font-bold py-1 px-2.5 rounded-full border focus:outline-none cursor-pointer ${
                 isLight 
-                  ? 'bg-slate-100 text-slate-900 border-slate-300 focus:border-cyan-600' 
-                  : 'bg-[#141b2c] text-cyan-300 border-cyan-500/30 focus:border-cyan-400'
+                  ? 'bg-slate-100 text-slate-900 border-slate-300 focus:border-amber-600' 
+                  : 'bg-[#180e2e] text-[#FBBF24] border-[#F59E0B]/30 focus:border-[#F59E0B]'
               }`}
             >
               {Array.from({ length: 39 }).map((_, i) => (
-                <option key={i} value={i} className={isLight ? 'bg-white text-slate-900' : 'bg-[#101522] text-white'}>
+                <option key={i} value={i} className={isLight ? 'bg-white text-slate-900' : 'bg-[#180e2e] text-white'}>
                   Substation #{i + 1} {trippedBuses.includes(i) ? '🔴 (TRIPPED)' : ''}
                 </option>
               ))}
             </select>
-            <ChevronDown className="w-3.5 h-3.5 text-cyan-500 ml-1 pointer-events-none" />
+            <ChevronDown className="w-3.5 h-3.5 text-[#F59E0B] ml-1 pointer-events-none" />
           </div>
 
-          {loading && <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping ml-1" />}
+          {loading && <span className="w-2 h-2 rounded-full bg-[#F59E0B] animate-ping ml-1" />}
         </div>
 
         {/* Top-Right: Department Overlays (Power, Water, Telecom, Healthcare) */}
-        <div className={`absolute top-3.5 right-4 z-20 flex items-center gap-1.5 border p-1 rounded-xl shadow-md pointer-events-auto transition-colors ${
-          isLight ? 'bg-white border-slate-200' : 'bg-[#101522] border-white/10'
+        <div className={`absolute top-3.5 right-4 z-20 flex items-center gap-1.5 border p-1 rounded-full shadow-md pointer-events-auto backdrop-blur-md transition-colors ${
+          isLight ? 'bg-white border-slate-200' : 'bg-[#130b24]/85 border-white/10'
         }`}>
           {[
-            { id: 'POWER', label: 'Power', icon: Zap, activeColor: isLight ? 'text-blue-700' : 'text-emerald-400' },
-            { id: 'WATER', label: 'Water', icon: Droplets, activeColor: isLight ? 'text-cyan-700' : 'text-cyan-400' },
-            { id: 'TELECOM', label: 'Telecom', icon: Radio, activeColor: isLight ? 'text-purple-700' : 'text-purple-400' },
-            { id: 'HEALTHCARE', label: 'Hospitals', icon: Hospital, activeColor: isLight ? 'text-emerald-700' : 'text-amber-400' },
+            { id: 'POWER', label: 'Power', icon: Zap, activeColor: '#FBBF24', activeClass: 'bg-[#FBBF24]/15 border-[#FBBF24]/40 text-[#FBBF24]' },
+            { id: 'WATER', label: 'Water', icon: Droplets, activeColor: '#2DD4BF', activeClass: 'bg-[#2DD4BF]/15 border-[#2DD4BF]/40 text-[#2DD4BF]' },
+            { id: 'TELECOM', label: 'Telecom', icon: Radio, activeColor: '#A855F7', activeClass: 'bg-[#A855F7]/15 border-[#A855F7]/40 text-[#A855F7]' },
+            { id: 'HEALTHCARE', label: 'Hospitals', icon: Hospital, activeColor: '#F43F5E', activeClass: 'bg-[#F43F5E]/15 border-[#F43F5E]/40 text-[#F43F5E]' },
           ].map(layer => {
             const Icon = layer.icon;
             const isEnabled = enabledLayers.includes(layer.id);
@@ -475,14 +503,14 @@ export default function TopologyPage() {
                   e.stopPropagation();
                   toggleLayer(layer.id);
                 }}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer border ${
                   isEnabled 
-                    ? (isLight ? 'bg-slate-900 text-white shadow-sm' : 'bg-white/20 text-white shadow-sm') 
-                    : (isLight ? 'text-slate-600 hover:text-slate-900 hover:bg-slate-100' : 'text-gray-400 hover:text-gray-200')
+                    ? (isLight ? 'bg-slate-900 text-white shadow-sm' : `${layer.activeClass} shadow-[0_0_10px_rgba(255,255,255,0.05)]`) 
+                    : (isLight ? 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 border-transparent' : 'text-[#a19ab5] hover:text-white border-transparent')
                 }`}
                 title={`Toggle ${layer.label} department network`}
               >
-                <Icon className={`w-3.5 h-3.5 ${isEnabled ? (isLight ? 'text-white' : layer.activeColor) : 'text-slate-400'}`} />
+                <Icon className={`w-3.5 h-3.5 ${isEnabled ? (isLight ? 'text-white' : '') : 'text-slate-500'}`} style={{ color: isEnabled && !isLight ? layer.activeColor : undefined }} />
                 <span>{layer.label}</span>
               </button>
             );
@@ -531,8 +559,10 @@ export default function TopologyPage() {
                 return (link.is_broken || brokenLines.includes(link.line_id) ? [4, 4] : []);
               }}
               backgroundColor={canvasBg}
-              cooldownTicks={100}
-              d3VelocityDecay={0.25}
+              warmupTicks={0}
+              cooldownTicks={10}
+              d3VelocityDecay={0.4}
+              d3AlphaDecay={0.06}
             />
           ) : (
             <div className={`font-mono text-xs animate-pulse ${labelTextClass}`}>Initializing Topology Graph...</div>
@@ -541,17 +571,19 @@ export default function TopologyPage() {
 
         {/* Canvas Bottom Legend / Instructions */}
         <div className="absolute bottom-3 left-4 right-4 z-20 flex justify-between items-center pointer-events-none">
-          <div className={`flex items-center gap-3 border px-3 py-1.5 rounded-xl text-[11px] font-mono pointer-events-auto shadow-md ${
-            isLight ? 'bg-white border-slate-200 text-slate-800' : 'bg-[#101522] border-white/10 text-gray-400'
+          <div className={`flex items-center gap-3 border px-3 py-1.5 rounded-full text-[11px] font-mono pointer-events-auto backdrop-blur-md shadow-md ${
+            isLight ? 'bg-white border-slate-200 text-slate-800' : 'bg-[#130b24]/85 border-white/10 text-[#a19ab5]'
           }`}>
-            <span>💡 <strong>Click any node</strong> on graph or select from top dropdown</span>
+            <span>💡 <strong>Click any node</strong> on graph or select from dropdown</span>
           </div>
-          <div className={`flex items-center gap-2 border px-3 py-1.5 rounded-xl text-[11px] font-mono pointer-events-auto shadow-md ${
-            isLight ? 'bg-white border-slate-200 text-slate-800' : 'bg-[#101522] border-white/10'
+          <div className={`flex items-center gap-3 border px-3 py-1.5 rounded-full text-[11px] font-mono pointer-events-auto backdrop-blur-md shadow-md ${
+            isLight ? 'bg-white border-slate-200 text-slate-800' : 'bg-[#130b24]/85 border-white/10'
           }`}>
-            <span className="flex items-center gap-1 text-emerald-700 dark:text-emerald-400 font-bold"><span className="w-2.5 h-2.5 rounded-full bg-emerald-600" /> Nominal</span>
-            <span className="flex items-center gap-1 text-amber-700 dark:text-amber-400 font-bold"><span className="w-2.5 h-2.5 rounded-full bg-amber-600" /> Stressed</span>
-            <span className="flex items-center gap-1 text-red-700 dark:text-red-400 font-bold"><span className="w-2.5 h-2.5 rounded-full bg-red-600" /> Power Failure</span>
+            <span className="flex items-center gap-1.5 text-[#FBBF24] font-bold"><span className="w-2.5 h-2.5 rounded-[3px] bg-[#FBBF24]" /> Power</span>
+            <span className="flex items-center gap-1.5 text-[#2DD4BF] font-bold"><span className="w-2.5 h-2.5 rounded-[3px] bg-[#2DD4BF]" /> Water</span>
+            <span className="flex items-center gap-1.5 text-[#A855F7] font-bold"><span className="w-2.5 h-2.5 rounded-[3px] bg-[#A855F7]" /> Telecom</span>
+            <span className="flex items-center gap-1.5 text-[#F43F5E] font-bold"><span className="w-2.5 h-2.5 rounded-[3px] bg-[#F43F5E]" /> Hospitals</span>
+            <span className="flex items-center gap-1.5 text-[#EF4444] font-bold"><span className="w-2.5 h-2.5 rounded-[3px] bg-[#EF4444]" /> Tripped</span>
           </div>
         </div>
       </div>
@@ -571,10 +603,10 @@ export default function TopologyPage() {
                 <h3 className={`text-base tracking-wide ${headerTextClass}`}>
                   Substation #{selectedBusId + 1}
                 </h3>
-                <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
+                <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border ${
                   isLight 
                     ? 'bg-slate-100 text-slate-800 border-slate-300' 
-                    : 'bg-cyan-950/80 text-cyan-300 border-cyan-800/40'
+                    : 'bg-[#261730] text-[#FBBF24] border-[#F59E0B]/30'
                 }`}>
                   345 kV Bulk Core
                 </span>
@@ -584,10 +616,10 @@ export default function TopologyPage() {
               </span>
             </div>
 
-            <span className={`text-[10px] font-mono font-bold px-2.5 py-1 rounded-md uppercase tracking-wider ${
+            <span className={`text-[10px] font-mono font-bold px-2.5 py-1 rounded-full uppercase tracking-wider ${
               isSelectedSubstationFailed
                 ? 'bg-red-600 text-white shadow-sm'
-                : 'bg-emerald-600 text-white shadow-sm'
+                : 'bg-[#261730] text-[#FBBF24] border border-[#F59E0B]/40 shadow-sm'
             }`}>
               {isSelectedSubstationFailed ? '⚡ POWER FAILURE' : 'ONLINE NOMINAL'}
             </span>
@@ -599,8 +631,8 @@ export default function TopologyPage() {
               <span className={`text-[10px] font-bold ${labelTextClass}`}>Bus Voltage</span>
               <strong className={`text-sm mt-0.5 font-black ${
                 currentVoltageMult > 1.15 
-                  ? (isLight ? 'text-amber-700' : 'text-amber-400') 
-                  : (isLight ? 'text-blue-700' : 'text-cyan-400')
+                  ? 'text-[#F59E0B]' 
+                  : 'text-[#FBBF24]'
               }`}>
                 {displayVoltageKv} kV
               </strong>
@@ -679,10 +711,10 @@ export default function TopologyPage() {
           {/* POWER FAILURE ACTION BUTTON */}
           <button
             onClick={() => handleToggleSubstationFailure(selectedBusId)}
-            className={`w-full py-3 px-4 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md ${
+            className={`w-full py-3 px-4 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg ${
               isSelectedSubstationTripped
-                ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                : 'bg-red-600 hover:bg-red-700 text-white'
+                ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-[0_0_15px_rgba(16,185,129,0.3)]'
+                : 'bg-gradient-to-r from-red-600 via-rose-600 to-red-700 hover:brightness-110 text-white shadow-[0_0_20px_rgba(239,68,68,0.4)]'
             }`}
           >
             <Zap className="w-4 h-4 fill-white" />
@@ -844,7 +876,7 @@ export default function TopologyPage() {
         <div className={`rounded-2xl p-4 flex flex-col gap-3 shrink-0 border transition-colors ${cardBgClass}`}>
           <div className="flex justify-between items-center">
             <span className={`text-xs font-bold ${isLight ? 'text-slate-900' : 'text-gray-200'}`}>Global Heatwave Demand</span>
-            <span className={`font-black font-mono text-sm ${isLight ? 'text-amber-700' : 'text-amber-400'}`}>{multiplier.toFixed(2)}x</span>
+            <span className={`font-black font-mono text-sm ${isLight ? 'text-amber-700' : 'text-[#FBBF24]'}`}>{multiplier.toFixed(2)}x</span>
           </div>
 
           <input
@@ -855,7 +887,7 @@ export default function TopologyPage() {
             value={multiplier}
             onChange={(e) => setMultiplier(parseFloat(e.target.value))}
             className={`w-full h-2 rounded-lg appearance-none cursor-pointer ${
-              isLight ? 'accent-amber-600 bg-slate-200' : 'accent-amber-400 bg-[#1a2130]'
+              isLight ? 'accent-amber-600 bg-slate-200' : 'accent-[#F59E0B] bg-[#180e2e]'
             }`}
           />
 
@@ -866,14 +898,14 @@ export default function TopologyPage() {
             <div className="flex items-center gap-2">
               <button
                 onClick={forceTripRandomBranch}
-                className="px-3 py-1.5 rounded-lg bg-red-600 text-white font-mono text-xs font-bold hover:bg-red-700 cursor-pointer shadow-sm"
+                className="px-3 py-1.5 rounded-full bg-gradient-to-r from-[#F59E0B] via-[#EC4899] to-[#F43F5E] text-[#18051e] font-mono text-xs font-extrabold hover:brightness-110 cursor-pointer shadow-[0_0_15px_rgba(244,63,94,0.35)]"
               >
                 + Trip Random Line
               </button>
               {(brokenLines.length > 0 || trippedBuses.length > 0) && (
                 <button
                   onClick={handleReset}
-                  className={`px-3 py-1.5 rounded-lg border font-mono text-xs font-bold cursor-pointer shadow-sm ${
+                  className={`px-3 py-1.5 rounded-full border font-mono text-xs font-bold cursor-pointer shadow-sm ${
                     isLight 
                       ? 'bg-slate-100 border-slate-300 text-slate-800 hover:bg-slate-200' 
                       : 'bg-white/5 border-white/10 text-gray-300 hover:text-white'
@@ -891,7 +923,7 @@ export default function TopologyPage() {
         <div className={`rounded-2xl p-4 flex flex-col gap-3 shrink-0 border transition-colors ${cardBgClass}`}>
           <div className="flex justify-between items-center">
             <h3 className={`text-xs uppercase tracking-wider ${headerTextClass}`}>Cascade Probability</h3>
-            <span className={`text-[10px] font-bold px-2.5 py-1 rounded uppercase tracking-wider ${
+            <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider ${
               maxRisk > 0.85
                 ? 'bg-red-600 text-white shadow-sm'
                 : 'bg-emerald-600 text-white shadow-sm'
@@ -917,15 +949,15 @@ export default function TopologyPage() {
           {/* Breakdown Counts */}
           <div className={`grid grid-cols-3 gap-2 text-center font-mono p-2 rounded-xl border ${innerBoxClass}`}>
             <div>
-              <span className={`font-black text-sm block ${isLight ? 'text-red-700' : 'text-red-400'}`}>{criticalCount}</span>
+              <span className={`font-black text-sm block ${isLight ? 'text-red-700' : 'text-[#EF4444]'}`}>{criticalCount}</span>
               <span className={`text-[9px] uppercase font-bold ${labelTextClass}`}>CRITICAL</span>
             </div>
             <div className="border-x border-slate-200 dark:border-white/10">
-              <span className={`font-black text-sm block ${isLight ? 'text-amber-700' : 'text-amber-400'}`}>{warningCount}</span>
+              <span className={`font-black text-sm block ${isLight ? 'text-amber-700' : 'text-[#F59E0B]'}`}>{warningCount}</span>
               <span className={`text-[9px] uppercase font-bold ${labelTextClass}`}>WARNING</span>
             </div>
             <div>
-              <span className={`font-black text-sm block ${isLight ? 'text-emerald-700' : 'text-emerald-400'}`}>{nominalCount}</span>
+              <span className={`font-black text-sm block ${isLight ? 'text-emerald-700' : 'text-[#2DD4BF]'}`}>{nominalCount}</span>
               <span className={`text-[9px] uppercase font-bold ${labelTextClass}`}>NOMINAL</span>
             </div>
           </div>
@@ -933,15 +965,15 @@ export default function TopologyPage() {
           {/* System-wide Cross-Sector Impact Quick Counts */}
           <div className={`grid grid-cols-3 gap-1.5 text-center font-mono text-[10px] p-2 rounded-xl border ${innerBoxClass}`}>
             <div>
-              <span className={`font-bold block ${isLight ? 'text-cyan-800' : 'text-cyan-400'}`}>{summary.water_pumps_tripped}</span>
+              <span className={`font-bold block ${isLight ? 'text-cyan-800' : 'text-[#2DD4BF]'}`}>{summary.water_pumps_tripped}</span>
               <span className={`text-[8px] ${labelTextClass}`}>Pumps Down</span>
             </div>
             <div className="border-x border-slate-200 dark:border-white/10">
-              <span className={`font-bold block ${isLight ? 'text-purple-800' : 'text-purple-400'}`}>{summary.cell_towers_on_battery}</span>
+              <span className={`font-bold block ${isLight ? 'text-purple-800' : 'text-[#A855F7]'}`}>{summary.cell_towers_on_battery}</span>
               <span className={`text-[8px] ${labelTextClass}`}>Towers Battery</span>
             </div>
             <div>
-              <span className={`font-bold block ${isLight ? 'text-emerald-800' : 'text-emerald-400'}`}>{summary.hospitals_on_generator}</span>
+              <span className={`font-bold block ${isLight ? 'text-emerald-800' : 'text-[#F43F5E]'}`}>{summary.hospitals_on_generator}</span>
               <span className={`text-[8px] ${labelTextClass}`}>Hosp on Gen</span>
             </div>
           </div>

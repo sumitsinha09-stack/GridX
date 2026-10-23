@@ -54,18 +54,32 @@ function DashboardLayout() {
 
   return (
     <motion.div
-      className={`flex flex-col h-full max-h-full font-sans overflow-hidden transition-colors duration-200 ${
-        isLight ? 'bg-[#f1f5f9] text-slate-900' : 'bg-[#07090e] text-gray-200'
+      className={`flex flex-col h-full max-h-full font-sans overflow-hidden transition-colors duration-200 relative ${
+        isLight ? 'bg-[#f8fafc] text-slate-900' : 'bg-[#0c0716] text-[#e2d9f3]'
       }`}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      transition={{ duration: 0.2 }}
+      transition={{ duration: 0.1 }}
     >
+      {/* Dynamic Ambient Background Glows */}
+      {!isLight && (
+        <div className="fixed inset-0 pointer-events-none z-0">
+          <div 
+            className="absolute -top-[15%] right-[10%] w-[600px] h-[600px] rounded-full blur-[160px] opacity-20"
+            style={{ background: 'radial-gradient(circle, #8B5CF6 0%, #EC4899 50%, transparent 70%)' }}
+          />
+          <div 
+            className="absolute bottom-[-10%] left-[-5%] w-[550px] h-[550px] rounded-full blur-[170px] opacity-15"
+            style={{ background: 'radial-gradient(circle, #F59E0B 0%, #E11D48 60%, transparent 75%)' }}
+          />
+        </div>
+      )}
+
       {/* Top Telemetry Header */}
-      <header className={`h-14 border-b flex items-center justify-between px-5 shrink-0 z-40 select-none transition-colors duration-200 ${
+      <header className={`h-14 border-b flex items-center justify-between px-6 shrink-0 z-40 select-none backdrop-blur-md transition-colors duration-200 ${
         isLight 
-          ? 'bg-white border-slate-200 shadow-sm' 
-          : 'bg-[#0a0d14] border-white/10'
+          ? 'bg-white/90 border-slate-200 shadow-sm' 
+          : 'bg-[#0f091c]/90 border-white/10'
       }`}>
         
         {/* Left: Brand / Logo */}
@@ -73,28 +87,28 @@ function DashboardLayout() {
           <Link to="/" className="flex items-center gap-2.5 hover:opacity-90 transition-opacity">
             <div className={`w-8 h-8 rounded-lg border flex items-center justify-center transition-colors ${
               isLight 
-                ? 'bg-cyan-50 border-cyan-400 text-cyan-600 shadow-sm' 
-                : 'bg-cyan-950/60 border-cyan-400/40 text-cyan-400 shadow-[0_0_12px_rgba(0,229,255,0.25)]'
+                ? 'bg-amber-50 border-amber-400 text-amber-600 shadow-sm' 
+                : 'bg-[#261730] border-[#F59E0B]/40 text-[#F59E0B] shadow-[0_0_12px_rgba(245,158,11,0.25)]'
             }`}>
-              <Zap className="w-4 h-4 text-cyan-500 fill-cyan-500" />
+              <Zap className="w-4 h-4 text-[#F59E0B] fill-[#F59E0B]" />
             </div>
             <div className="flex flex-col">
               <div className="flex items-center gap-2">
-                <span className={`font-extrabold text-base tracking-wider font-sans leading-none ${
+                <span className={`font-black text-lg tracking-tight font-sans leading-none ${
                   isLight ? 'text-slate-900' : 'text-white'
                 }`}>
-                  GRIDX
+                  GRID<span className="text-[#F59E0B]">X</span>
                 </span>
-                <span className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded leading-none border ${
+                <span className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded-full leading-none border ${
                   isLight 
-                    ? 'bg-cyan-100 text-cyan-800 border-cyan-300' 
-                    : 'bg-cyan-500/20 text-cyan-400 border-cyan-400/50'
+                    ? 'bg-amber-100 text-amber-800 border-amber-300' 
+                    : 'bg-[#261730] text-[#FBBF24] border-[#F59E0B]/30'
                 }`}>
-                  V4.8-RT
+                  V4.8-RT • LIVE TWIN
                 </span>
               </div>
               <span className={`text-[8.5px] font-mono tracking-widest uppercase mt-0.5 leading-none ${
-                isLight ? 'text-slate-500' : 'text-gray-400'
+                isLight ? 'text-slate-500' : 'text-[#a19ab5]'
               }`}>
                 Critical Infrastructure Telemetry
               </span>
@@ -103,7 +117,7 @@ function DashboardLayout() {
         </div>
 
         {/* Center: Multi-Page Navigation Bar */}
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 p-1 rounded-full border border-white/5 bg-black/20">
           {navLinks.map((link) => {
             const Icon = link.icon;
             const isActive = location.pathname === link.to;
@@ -111,21 +125,21 @@ function DashboardLayout() {
             let buttonClass = '';
             if (isActive) {
               buttonClass = isLight 
-                ? 'bg-cyan-600 text-white font-bold shadow-sm' 
-                : 'bg-cyan-400 text-slate-950 font-bold shadow-[0_0_12px_rgba(0,229,255,0.35)]';
+                ? 'bg-slate-900 text-white font-bold shadow-sm' 
+                : 'bg-[#261730] text-white font-bold border border-white/20 shadow-[0_0_15px_rgba(168,85,247,0.35)]';
             } else {
               buttonClass = isLight
                 ? 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                : 'text-gray-400 hover:text-white hover:bg-white/5';
+                : 'text-[#a19ab5] hover:text-white hover:bg-white/5';
             }
 
             return (
               <Link
                 key={link.to}
                 to={link.to}
-                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${buttonClass}`}
+                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all ${buttonClass}`}
               >
-                <Icon className={`w-3.5 h-3.5 ${isActive ? (isLight ? 'text-white' : 'text-slate-950') : (isLight ? 'text-slate-500' : 'text-gray-400')}`} />
+                <Icon className={`w-3.5 h-3.5 ${isActive ? (isLight ? 'text-white' : 'text-[#FBBF24]') : (isLight ? 'text-slate-500' : 'text-[#a19ab5]')}`} />
                 <span>{link.label}</span>
               </Link>
             );
